@@ -1,0 +1,5 @@
+// Asking (A)
+A 1 4 D1
+// Calling (C)
+// Player 2 calls for 2, 4, 6
+C 2 {D1,DQ,DK} {DJ,D10,D9} {}
