@@ -1,5 +1,6 @@
 // Asking (A)
-A 1 4 D1
+// Player 1 asks 4 for the ace of diamonds; successful.
+A 1 4 D1 1
 // Calling (C)
-// Player 2 calls for 2, 4, 6
-C 2 {D1,DQ,DK} {DJ,D10,D9} {}
+// Player 2 states 2 has ace, queen, and king of diamonds; 4 has jack, ten and nine; and 6 has none; successful.
+C 2 {DA,DQ,DK} {DJ,D10,D9} {} 1
