@@ -2,13 +2,13 @@
 // Player initials, in player number order
 KL PB AC AT YS KZ
 // Six sets with the six hands, in player number order
-{} {} {} {} {} {}
+KL:{} PB:{} AC:{} AT:{} YS:{} KZ:{}
 // Asking (A)
 // Player 1 asks 4 for the ace of diamonds; successful.
-A 1 4 DA 1
+A KL AT DA 1
 // Calling (C)
 // Player 2 states 2 has ace, queen, and king of diamonds; 4 has jack, ten and nine; and 6 has none; successful.
-C 2 {DA,DQ,DK} {DJ,D10,D9} {} 1
+C KL KL:{DA,DQ,DK} AC:{DJ,D10,D9} AT:{} 1
 // End
 // Odds have 5 sets, evens have 4
 5 4
