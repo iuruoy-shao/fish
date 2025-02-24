@@ -50,5 +50,5 @@ class FishGame:
                 self.hands.append(new_hands)
         print("data is valid, score needs to be manually verified")
 if __name__ == "__main__":
-    with open("12-10_11:07.txt", "r") as f:
+    with open("data/1-15_11:15.txt", "r") as f:
         game = FishGame(f.readlines())
