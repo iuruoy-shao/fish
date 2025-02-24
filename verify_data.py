@@ -12,21 +12,21 @@ class FishGame:
                 new_hands = copy.deepcopy(self.hands[-1])
                 call = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(',')) for player in line[3:].split()[:-1]}
                 if status == "1":
-                    try:
-                        for player, cards in call.items():
-                            for card in cards:
+                    for player, cards in call.items():
+                        for card in cards:
+                            try:
                                 new_hands[player].remove(card)
-                        self.hands.append(new_hands)
-                    except KeyError:
-                        print(f"Invalid successful set call on line {i+2} {self.hands[-1]}")
-                        break
+                            except KeyError:
+                                print(f"Invalid successful set call on line {i+2} {self.hands[-1]}")
+                                exit()
+                    self.hands.append(new_hands)
                 else:
                     try:
                         for player, cards in call.items():
                             for card in cards:
                                 new_hands[player].remove(card)
                         print(f"Invalid unsuccessful set call on line {i+2} {self.hands[-1]}")
-                        break
+                        exit()
                     except KeyError:
                         called_cards = set()
                         for v in call.values():
@@ -46,9 +46,9 @@ class FishGame:
                     new_hands[asking_player].add(card)
                 except KeyError:
                     print(f"Invalid transaction on line {i+2}")
-                    break
+                    exit()
                 self.hands.append(new_hands)
         print("data is valid, score needs to be manually verified")
 if __name__ == "__main__":
-    with open("12-3_2:27.txt", "r") as f:
+    with open("12-10_11:07.txt", "r") as f:
         game = FishGame(f.readlines())
