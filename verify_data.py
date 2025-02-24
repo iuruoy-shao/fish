@@ -48,7 +48,8 @@ class FishGame:
                     print(f"Invalid transaction on line {i+2}")
                     exit()
                 self.hands.append(new_hands)
-        print("data is valid, score needs to be manually verified")
+        if not any(self.hands[-1].values()):
+            print("data is valid, score needs to be manually verified")
 if __name__ == "__main__":
-    with open("data/1-15_11:15.txt", "r") as f:
+    with open("data/12-3_11:12.txt", "r") as f:
         game = FishGame(f.readlines())
