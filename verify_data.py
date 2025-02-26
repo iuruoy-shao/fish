@@ -92,14 +92,18 @@ class FishGame:
         state_array = np.concatenate((state_array, self.encode_player(calling_p)))
 
         # encoding calls
+        called_set = False
         for player in self.teammates(calling_p):
-            c = np.zeros(15)
+            c = np.zeros(6)
             if player in call:
                 for card in call[player]:
-                    c += card_to_vector[card]
+                    if not called_set:
+                        called_set = True
+                        state_array = np.concatenate((state_array, card_to_vector[card][6:]))
+                    c += card_to_vector[card][:6]
             c = c > 0
             state_array = np.concatenate((state_array, c))
-        
+
         # encoding status
         state_array = np.concatenate((state_array, np.array([status])))
         return state_array
@@ -111,10 +115,10 @@ class FishGame:
                                self.encode_player(asked_p),
                                card_to_vector[card],
                                np.array([status]),
-                               np.zeros(37)))
+                               np.zeros(10)))
         
     def to_state(self):
-        self.state = np.zeros((200,70), dtype=int)
+        self.state = np.zeros((200,43), dtype=int)
         for i, line in enumerate(self.datarows[1:-1]):
             self.state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
 
