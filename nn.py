@@ -9,10 +9,8 @@ class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, 128)
-        self.fc5 = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(1024, 256)
+        self.fc5 = nn.Linear(256, 64)
 
         self.to_call = nn.Linear(64, 1) 
         self.pick_call_set = nn.Linear(64, 9)
@@ -64,6 +62,9 @@ class QLearningAgent:
     
     def remember(self, state, action, reward, next_state, done): # TODO: understand this
         self.memory.append((state, action, reward, next_state, done))
+
+    def input_actions():
+        pass
         
     def act(self, state):
         if random.random() < self.epsilon: # explore

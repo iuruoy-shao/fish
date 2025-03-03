@@ -21,8 +21,10 @@ class FishGame:
         self.init_hands = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(',')) for player in self.datarows[0].split()}
         self.players = list(self.init_hands.keys())
         self.score = [0, 0]
+        self.rewards = [] # encodes for the odd team, reverse for even team
         self.verify()
         self.to_state()
+        self.set_memory()
 
     def initials_to_index(self, initials):
         return self.players.index(initials)
@@ -86,6 +88,7 @@ class FishGame:
     
     def construct_call_vector(self, call):
         calling_p, call, status = call.values()
+        self.rewards.append(-1 if self.initials_to_index(calling_p) == status else 1) # award for beneficiary
         state_array = np.array([1]) # call indicator
 
         # encoding caller
@@ -93,6 +96,7 @@ class FishGame:
 
         # encoding calls
         called_set = False
+        call = np.array([])
         for player in self.teammates(calling_p):
             c = np.zeros(6)
             if player in call:
@@ -102,13 +106,14 @@ class FishGame:
                         state_array = np.concatenate((state_array, card_to_vector[card][6:]))
                     c += card_to_vector[card][:6]
             c = c > 0
-            state_array = np.concatenate((state_array, c))
+            call = np.concatenate((call, c))
 
         # encoding status
-        state_array = np.concatenate((state_array, np.array([status], np.zeros(11))))
+        state_array = np.concatenate((state_array, c.T, np.array([status], np.zeros(11))))
         return state_array
 
     def construct_ask_vector(self, ask):
+        self.rewards.append(0)
         asking_p, asked_p, card, status = ask.values()
         return np.concatenate((np.array([0]), 
                                self.encode_player(asking_p),
@@ -127,9 +132,29 @@ class FishGame:
         for card in hand:
             hand_vector[np.where(sets == card)[0][0]][np.where(sets == card)[1][0]] = 1
         return hand_vector.flatten()
-
+    
     def get_state(self, i, player):
-        return np.concatenate(self.encode_hand(self.hands[i][player]), self.state[0:i:-1], np.zeros((200-i-1,54))) # invert sequential order, pad up to 200
+        if i < len(self.hands):
+            return np.concatenate(self.encode_hand(self.hands[i][player]), self.state[:i:-1], np.zeros((200-i-1,54)))
+        return np.concatenate(self.encode_hand(self.hands[-1][player]), self.state[::-1], np.zeros((200-len(self.hands)-1,54)))
+
+    def set_memory(self, player):
+        self.memory = [{
+            'state': self.get_state(i, player), # invert sequential order, pad up to 200,
+            'reward': self.rewards[i],
+            'action': {
+                'call_set': { # masking & normalizing
+                    'call': self.state[i][0],
+                    'call_set': self.state[i][1:1+9] if self.state[i][0] else None,
+                    'call_cards': self.state[i][1+9:1+9+24] if self.state[i][0] else None,
+                    'ask_person': None if self.state[i][0] else None, # TODO: start here
+                    'ask_set': None,
+                    'ask_card': None, 
+                    'pick_pass': None
+                },
+            },
+            'next_state': self.get_state(i+1, player)
+        } for i in range(len(self.state))]
 
     def verify(self):
         hands = [self.init_hands]
@@ -137,7 +162,7 @@ class FishGame:
         for i, line in enumerate(self.datarows[1:-1]):
             if ":" in line: # calling
                 hands.append(self.try_call(self.parse_call(line), hands[-1], i))
-            elif self.parse_ask(line)['status']:
+            elif self.parse_ask(line)['status']: # asking
                 ask = self.parse_ask(line)
                 hands.append(self.try_ask(ask, hands[-1], i))
         if score != self.score:
