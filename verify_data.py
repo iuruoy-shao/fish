@@ -105,7 +105,7 @@ class FishGame:
             state_array = np.concatenate((state_array, c))
 
         # encoding status
-        state_array = np.concatenate((state_array, np.array([status])))
+        state_array = np.concatenate((state_array, np.array([status], np.zeros(11))))
         return state_array
 
     def construct_ask_vector(self, ask):
@@ -115,12 +115,21 @@ class FishGame:
                                self.encode_player(asked_p),
                                card_to_vector[card],
                                np.array([status]),
-                               np.zeros(10)))
+                               np.zeros(21)))
         
     def to_state(self):
-        self.state = np.zeros((200,43), dtype=int)
+        self.state = np.zeros((len(self.datarows[1:-1]),54), dtype=int)
         for i, line in enumerate(self.datarows[1:-1]):
             self.state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
+
+    def encode_hand(self, hand):
+        hand_vector = np.zeros((9,6), dtype=int)
+        for card in hand:
+            hand_vector[np.where(sets == card)[0][0]][np.where(sets == card)[1][0]] = 1
+        return hand_vector.flatten()
+
+    def get_state(self, i, player):
+        return np.concatenate(self.encode_hand(self.hands[i][player]), self.state[0:i:-1], np.zeros((200-i-1,54))) # invert sequential order, pad up to 200
 
     def verify(self):
         hands = [self.init_hands]
@@ -142,3 +151,4 @@ def repl_func(match: re.Match):
 if __name__ == "__main__":
     with open("data/12-3_14:05.txt", "r") as f:
         game = FishGame(f.readlines())
+        print(game.state)
