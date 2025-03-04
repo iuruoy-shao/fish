@@ -19,8 +19,6 @@ class QNetwork(nn.Module):
         self.pick_person = nn.Linear(64, 1)
         self.pick_ask_set = nn.Linear(64 + 1, 9)
         self.pick_ask_card = nn.Linear(64 + 1 + 9, 6)
-
-        self.pick_pass = nn.Linear(64, 3)
         
     def forward(self, x, action_masks):
         x = torch.flatten(x)
@@ -31,7 +29,6 @@ class QNetwork(nn.Module):
         ask_person = self.pick_person(x)
         ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
         ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
-        pick_pass = self.pick_pass(x)
 
         return { # masking & normalizing
             'call': F.sigmoid(to_call),
@@ -40,7 +37,6 @@ class QNetwork(nn.Module):
             'ask_person': F.softmax(ask_person.masked_fill(action_masks['ask_person'], -float('inf'))),
             'ask_set': F.softmax(ask_set.masked_fill(action_masks['ask_set'], -float('inf'))),
             'ask_card': F.softmax(ask_card), 
-            'pick_pass': F.softmax(pick_pass.masked_fill(action_masks['pick_pass'], -float('inf')))
         }
 
 # Q-Learning Agent
@@ -89,7 +85,6 @@ class QLearningAgent:
             'call_cards': np.tile(self.cards_remaining[self.agent_index%2::2] > 0, (6, 1)), # the players on the team that still have cards
             'ask_person': self.cards_remaining[(self.agent_index+1)%2::2] > 0, # the players on the opposing team that still have cards
             'ask_set': (np.sum(self.hand, axis=1) > 0).astype(int), # the sets that the player holds
-            'pick_pass': self.cards_remaining[(self.agent_index+1)%2::2] > 0 # the players on the team that still have cards
         }
     
     def train(self):

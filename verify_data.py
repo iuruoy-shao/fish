@@ -139,18 +139,19 @@ class FishGame:
         return np.concatenate(self.encode_hand(self.hands[-1][player]), self.state[::-1], np.zeros((200-len(self.hands)-1,54)))
 
     def set_memory(self, player):
+        is_ask = lambda i: not self.state[i][0] and self.state[i][1:9] == self.encode_player(player)
+        is_call = lambda i: self.state[i][0] and self.state[i][1:9] == self.encode_player(player)
         self.memory = [{
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
             'reward': self.rewards[i],
             'action': {
                 'call_set': { # masking & normalizing
-                    'call': self.state[i][0],
-                    'call_set': self.state[i][1:1+9] if self.state[i][0] else None,
-                    'call_cards': self.state[i][1+9:1+9+24] if self.state[i][0] else None,
-                    'ask_person': None if self.state[i][0] else None, # TODO: start here
-                    'ask_set': None,
-                    'ask_card': None, 
-                    'pick_pass': None
+                    'call': is_call(i),
+                    'call_set': self.state[i][1:1+9] if is_call(i) else None,
+                    'call_cards': self.state[i][1+9:1+9+24] if is_call(i) else None,
+                    'ask_person': self.state[i][9:9+8] if is_ask(i) else None, 
+                    'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
+                    'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
                 },
             },
             'next_state': self.get_state(i+1, player)
