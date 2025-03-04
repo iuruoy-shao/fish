@@ -24,7 +24,6 @@ class FishGame:
         self.rewards = [] # encodes for the odd team, reverse for even team
         self.verify()
         self.to_state()
-        self.set_memory()
 
     def initials_to_index(self, initials):
         return self.players.index(initials)
@@ -82,7 +81,7 @@ class FishGame:
             raise ParseError(f"Invalid transaction on line {i+2}") from e
         
     def encode_player(self, initials):
-        p = np.zeros(8)
+        p = np.zeros(8, dtype=int)
         p[self.initials_to_index(initials)] = 1
         return p
     
@@ -109,7 +108,7 @@ class FishGame:
             call = np.concatenate((call, c))
 
         # encoding status
-        state_array = np.concatenate((state_array, c.T, np.array([status], np.zeros(11))))
+        state_array = np.concatenate((state_array, call.T, np.array([status]), np.zeros(20)))
         return state_array
 
     def construct_ask_vector(self, ask):
@@ -127,21 +126,22 @@ class FishGame:
         for i, line in enumerate(self.datarows[1:-1]):
             self.state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
 
-    def encode_hand(self, hand):
+    def encode_hand(self, hand, flatten=True):
         hand_vector = np.zeros((9,6), dtype=int)
         for card in hand:
             hand_vector[np.where(sets == card)[0][0]][np.where(sets == card)[1][0]] = 1
-        return hand_vector.flatten()
+        return hand_vector.flatten() if flatten else hand_vector
     
-    def get_state(self, i, player):
-        if i < len(self.hands):
-            return np.concatenate(self.encode_hand(self.hands[i][player]), self.state[:i:-1], np.zeros((200-i-1,54)))
-        return np.concatenate(self.encode_hand(self.hands[-1][player]), self.state[::-1], np.zeros((200-len(self.hands)-1,54)))
+    def get_state(self, i, player, pad=True):
+        i = i if i < len(self.hands) else -1
+        return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
+                                self.state[:i][::-1],
+                                np.zeros((200-i-1,54))))
 
-    def set_memory(self, player):
-        is_ask = lambda i: not self.state[i][0] and self.state[i][1:9] == self.encode_player(player)
-        is_call = lambda i: self.state[i][0] and self.state[i][1:9] == self.encode_player(player)
-        self.memory = [{
+    def memory(self, player):
+        is_ask = lambda i: not self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
+        is_call = lambda i: self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
+        return [{
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
             'reward': self.rewards[i],
             'action': {
@@ -156,6 +156,19 @@ class FishGame:
             },
             'next_state': self.get_state(i+1, player)
         } for i in range(len(self.state))]
+    
+    def sets_remaining(self, i):
+        cards_remaining = np.zeros((9,6), dtype=int)
+        for hand in self.hands[i].values():
+            cards_remaining += self.encode_hand(hand, flatten=False)
+        return (np.sum(cards_remaining, axis=1) > 0).astype(int)
+    
+    def mask_dependencies(self, player):
+        return [{
+            'agent_index': self.players.index(player),
+            'hand': self.encode_hand(self.hands[i][player], flatten=False), # 9x6
+            'sets_remaining': self.sets_remaining(i)
+        } for i in range(len(self.hands)-1)]
 
     def verify(self):
         hands = [self.init_hands]
@@ -177,4 +190,4 @@ def repl_func(match: re.Match):
 if __name__ == "__main__":
     with open("data/12-3_14:05.txt", "r") as f:
         game = FishGame(f.readlines())
-        print(game.state)
+        print(game.mask_dependencies(game.players[0])[0])
