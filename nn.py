@@ -41,43 +41,39 @@ class QNetwork(nn.Module):
 
 # Q-Learning Agent
 class QLearningAgent:
-    def __init__(self, action_size):
-        self.agent_index = None,
-        self.hand = np.array() # 9x6
-        self.sets_remaining = np.array() # 6
-        self.card_count = np.array() # 8
+    def __init__(self, mask_dependencies, memory):
+        self.agent_index = mask_dependencies['agent_index'],
+        self.hand = mask_dependencies['hand'],
+        self.sets_remaining = mask_dependencies['sets_remaining'],
+        
+        self.memory = memory
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        self.q_network = QNetwork(action_size).to(self.device)
+        self.q_network = QNetwork().to(self.device)
         self.optimizer = torch.optim.Adam(self.q_network.parameters())
-        self.memory = deque(maxlen=10000)
         
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
-        self.batch_size = 64
-    
-    def remember(self, state, action, reward, next_state, done): # TODO: understand this
-        self.memory.append((state, action, reward, next_state, done))
+        self.batch_size = 32
 
     def input_actions():
         pass
         
-    def act(self, state):
-        if random.random() < self.epsilon: # explore
-            
-        else: # exploit
-        
+    def act(self, state): #TODO: complete
         # Convert state to tensor and add batch dimension
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
             action_values = self.q_network(state) # return action valeus
-        return torch.argmax(action_values).item()
-    
-    def update_values(self): # update hands, sets_remaining, players_with_cards, etc.
-        pass
+        if random.random() < self.epsilon: # explore
+            pass
+        else: # exploit
+            pass
 
-    def q_loss(self, ):
-        pass
+    def q_loss(self, action, next_action, player_action, reward):
+        loss = lambda prev, next, player, reward: F.mse_loss(sum(prev * player), torch.tensor([reward + self.gamma * torch.max(next).item()]))
+        return sum(loss(action[act], next_action[act], player_action[act], reward) 
+                   for act in player_action.keys() 
+                   if player_action[act] is not None)
     
     def action_masks(self):
         return {
@@ -92,21 +88,23 @@ class QLearningAgent:
             return
         
         batch = random.sample(self.memory, self.batch_size)
-        states = torch.FloatTensor([i[0] for i in batch]).to(self.device)
-        actions = torch.LongTensor([i[1] for i in batch]).to(self.device)
-        rewards = torch.FloatTensor([i[2] for i in batch]).to(self.device)
-        next_states = torch.FloatTensor([i[3] for i in batch]).to(self.device)
-        dones = torch.FloatTensor([i[4] for i in batch]).to(self.device)
+        state = [], action = [], reward = [], next_state = [], dones = []
+        for row in batch:
+            state.append(row['state'])
+            action.append(row['action'])
+            reward.append(row['reward'])
+            next_state.append(row['next_state'])
+        state = torch.FloatTensor(state).to(self.device)
+        action = torch.LongTensor(action).to(self.device)
+        reward = torch.FloatTensor(reward).to(self.device)
+        next_state = torch.FloatTensor(next_state).to(self.device)
         
-        current_q = self.q_network(states).gather(1, actions.unsqueeze(1))
-        next_q = self.q_network(next_states).max(1)[0].detach()
-        target_q = rewards + (1 - dones) * self.gamma * next_q
-        
-        loss = nn.MSELoss()(current_q.squeeze(), target_q)
+        current_q = self.q_network(state)
+        next_q = self.q_network(next_state)
+        loss = self.q_loss(current_q, next_q, action, reward)
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-# Example usage
-action_size = 2   # number of possible actions
-agent = QLearningAgent(action_size)
+agent = QLearningAgent()

@@ -145,17 +145,15 @@ class FishGame:
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
             'reward': self.rewards[i],
             'action': {
-                'call_set': { # masking & normalizing
-                    'call': is_call(i),
-                    'call_set': self.state[i][1:1+9] if is_call(i) else None,
-                    'call_cards': self.state[i][1+9:1+9+24] if is_call(i) else None,
-                    'ask_person': self.state[i][9:9+8] if is_ask(i) else None, 
-                    'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
-                    'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
-                },
+                'call': is_call(i),
+                'call_set': self.state[i][1:1+9] if is_call(i) else None,
+                'call_cards': self.state[i][1+9:1+9+24] if is_call(i) else None,
+                'ask_person': self.state[i][9:9+8] if is_ask(i) else None, 
+                'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
+                'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },
             'next_state': self.get_state(i+1, player)
-        } for i in range(len(self.state))]
+        } for i in range(len(self.hands)-1)]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
