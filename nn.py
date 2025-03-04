@@ -45,9 +45,11 @@ class QLearningAgent:
         self.agent_index = mask_dependencies['agent_index'],
         self.hand = mask_dependencies['hand'],
         self.sets_remaining = mask_dependencies['sets_remaining'],
-        
+
         self.memory = memory
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() 
+                                   else "cuda" if torch.cuda.is_available() 
+                                   else "cpu")
         
         self.q_network = QNetwork().to(self.device)
         self.optimizer = torch.optim.Adam(self.q_network.parameters())
