@@ -148,7 +148,7 @@ class FishGame:
                 'call': is_call(i),
                 'call_set': self.state[i][1:1+9] if is_call(i) else None,
                 'call_cards': self.state[i][1+9:1+9+24] if is_call(i) else None,
-                'ask_person': self.state[i][9:9+8] if is_ask(i) else None, 
+                'ask_person': self.state[i][9:9+8][(self.players.index(player)+1)%2::2] if is_ask(i) else None, 
                 'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
                 'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },
