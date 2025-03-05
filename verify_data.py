@@ -152,7 +152,9 @@ class FishGame:
                 'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
                 'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },
-            'next_state': self.get_state(i+1, player)
+            'next_state': self.get_state(i+1, player),
+            'mask_dep': self.mask_dep(i, player),
+            'next_mask_dep': self.mask_dep(i+1, player)
         } for i in range(len(self.hands)-1)]
     
     def sets_remaining(self, i):
@@ -161,12 +163,13 @@ class FishGame:
             cards_remaining += self.encode_hand(hand, flatten=False)
         return (np.sum(cards_remaining, axis=1) > 0).astype(int)
     
-    def mask_dependencies(self, player):
-        return [{
+    def mask_dep(self, i, player):
+        return {
             'agent_index': self.players.index(player),
             'hand': self.encode_hand(self.hands[i][player], flatten=False), # 9x6
-            'sets_remaining': self.sets_remaining(i)
-        } for i in range(len(self.hands)-1)]
+            'sets_remaining': self.sets_remaining(i),
+            'cards_remaining': np.array([len(hand) for hand in self.hands[i].values()])
+        }
 
     def verify(self):
         hands = [self.init_hands]

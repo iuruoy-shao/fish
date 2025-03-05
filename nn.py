@@ -10,7 +10,7 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
-        self.fc5 = nn.Linear(256, 64)
+        self.fc3 = nn.Linear(256, 64)
 
         self.to_call = nn.Linear(64, 1) 
         self.pick_call_set = nn.Linear(64, 9)
@@ -22,7 +22,7 @@ class QNetwork(nn.Module):
         
     def forward(self, x, action_masks):
         x = torch.flatten(x)
-        x = self.fc5(self.fc4(self.fc3(self.fc2(self.fc1(x)))))
+        x = self.fc3(self.fc2(self.fc1(x)))
         to_call = self.to_call(x)
         call_set = self.pick_call_set(x)
         call_cards = torch.reshape(self.pick_call_card(torch.cat((x, call_set), 1)),(6,4))
@@ -77,33 +77,39 @@ class QLearningAgent:
                    for act in player_action.keys() 
                    if player_action[act] is not None)
     
-    # def action_masks(self):
-    #     return {
-    #         'call_set': self.sets_remaining, # the sets that remain
-    #         'call_cards': np.tile(self.cards_remaining[self.agent_index%2::2] > 0, (6, 1)), # the players on the team that still have cards
-    #         'ask_person': self.cards_remaining[(self.agent_index+1)%2::2] > 0, # the players on the opposing team that still have cards
-    #         'ask_set': (np.sum(self.hand, axis=1) > 0).astype(int), # the sets that the player holds
-    #     }
+    def action_masks(self, agent_index, sets_remaining, cards_remaining, hand):
+        return {
+            'call_set': sets_remaining, # the sets that remain
+            'call_cards': np.tile(cards_remaining[agent_index%2::2] > 0, (6, 1)), # the players on the team that still have cards
+            'ask_person': cards_remaining[(agent_index+1)%2::2] > 0, # the players on the opposing team that still have cards
+            'ask_set': (np.sum(hand, axis=1) > 0).astype(int), # the sets that the player holds
+        }
     
     def train(self):
         if len(self.memory) < self.batch_size:
             return
         
         batch = random.sample(self.memory, self.batch_size)
-        state = [], action = [], reward = [], next_state = [], dones = []
+        states = []
+        actions = []
+        rewards = []
+        next_states = []
+        masks = []
+        next_masks = []
         for row in batch:
-            state.append(row['state'])
-            action.append(row['action'])
-            reward.append(row['reward'])
-            next_state.append(row['next_state'])
-        state = torch.FloatTensor(state).to(self.device)
-        action = torch.LongTensor(action).to(self.device)
-        reward = torch.FloatTensor(reward).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        
-        current_q = self.q_network(state)
-        next_q = self.q_network(next_state)
-        loss = self.q_loss(current_q, next_q, action, reward)
+            states.append(row['state'])
+            actions.append(row['action'])
+            rewards.append(row['reward'])
+            next_states.append(row['next_state'])
+            md = row['mask_dep']
+            nmd = row['next_mask_dep']
+            masks.append(self.action_masks(md['agent_index'], md['sets_remaining'], md['cards_remaining'], md['hand']))
+            next_masks.append(self.action_masks(nmd['agent_index'], nmd['sets_remaining'], nmd['cards_remaining'], nmd['hand']))
+        states = torch.FloatTensor(states).to(self.device)
+
+        current_q = self.q_network(states, masks)
+        next_q = self.q_network(next_states)
+        loss = self.q_loss(current_q, next_q, actions, rewards)
 
         self.optimizer.zero_grad()
         loss.backward()
