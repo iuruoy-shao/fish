@@ -83,8 +83,8 @@ class QLearningAgent:
                 loss(
                     action[act][i],
                     next_action[act][i],
-                    self.tensor(np.array(player_action[act][i]).reshape(-1)),
-                    self.tensor(np.array(reward[i]).reshape(-1)),
+                    self.tensor(player_action[act][i]),
+                    self.tensor(reward[i]),
                 )
                 for act in player_action.keys()
                 if player_action[act][i] is not None
