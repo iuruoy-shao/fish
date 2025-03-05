@@ -168,7 +168,8 @@ class FishGame:
             'agent_index': self.players.index(player),
             'hand': self.encode_hand(self.hands[i][player], flatten=False), # 9x6
             'sets_remaining': self.sets_remaining(i),
-            'cards_remaining': np.array([len(hand) for hand in self.hands[i].values()])
+            'cards_remaining': np.array([len(hand) for hand in self.hands[i].values()] 
+                                        + ([0, 0] if len(self.players) == 6 else [])) # pad to length 8
         }
 
     def verify(self):
