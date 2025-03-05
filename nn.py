@@ -78,20 +78,18 @@ class QLearningAgent:
     def q_loss(self, action, next_action, player_action, reward):
         loss = lambda prev, next, player, reward: F.mse_loss(sum(prev * player), 
                                                              reward + self.gamma * torch.max(next).item())
-        return self.tensor(
-            [
-                sum(
-                    loss(
-                        action[act][i],
-                        next_action[act][i],
-                        self.tensor(np.array(player_action[act][i]).reshape(-1)),
-                        self.tensor(np.array(reward[i]).reshape(-1)),
-                    )
-                    for act in player_action.keys()
-                    if player_action[act][i] is not None
+        return sum(
+            sum(
+                loss(
+                    action[act][i],
+                    next_action[act][i],
+                    self.tensor(np.array(player_action[act][i]).reshape(-1)),
+                    self.tensor(np.array(reward[i]).reshape(-1)),
                 )
-                for i in range(len(reward))
-            ]
+                for act in player_action.keys()
+                if player_action[act][i] is not None
+            )
+            for i in range(len(reward))
         )
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
@@ -118,13 +116,21 @@ class QLearningAgent:
                 result[key] = [item[key] for item in batch]
         return result
     
-    def train(self):    
-        batch = self.unpack_batch(random.sample(self.memory, self.batch_size))
-        current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
-        next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
-        loss = self.q_loss(current_q, next_q, batch['action'], batch['reward'])
+    def train(self, n_epochs):    
+        for epoch in range(n_epochs):
+            random.shuffle(self.memory)
+            total_loss = 0
 
-        self.optimizer.zero_grad()
-        loss.backward()
+            for i in range(0, len(self.memory), self.batch_size):
+                batch = self.unpack_batch(self.memory[i:i + self.batch_size])
+                current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
+                next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
+                
+                loss = self.q_loss(current_q, next_q, batch['action'], batch['reward'])
+                total_loss += loss.item()
 
-        self.optimizer.step()
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+            
+            print(f"epoch {epoch}, loss {total_loss}")
