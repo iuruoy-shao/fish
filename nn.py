@@ -85,8 +85,10 @@ class QLearningAgent:
         cards_remaining = np.array(cards_remaining)
         return {
             'call_set': self.to_tensor(sets_remaining, as_bool=True), # the sets that remain
-            'call_cards': self.to_tensor([np.tile(cards_remaining[index%2::2] > 0, (6, 1)) for index in agent_index], as_bool=True), # the players on the team that still have cards
-            'ask_person': self.to_tensor([cards_remaining[(index+1)%2::2] > 0 for index in agent_index], as_bool=True), # the players on the opposing team that still have cards
+            'call_cards': self.to_tensor([np.tile(np.array(cards_remaining)[:,index%2::2] > 0, (1, 6, 1)) 
+                                          for index in agent_index], as_bool=True), # the players on the team that still have cards
+            'ask_person': self.to_tensor([np.array(cards_remaining)[:,(index+1)%2::2] > 0 
+                                          for index in agent_index], as_bool=True), # the players on the opposing team that still have cards
             'ask_set': self.to_tensor(np.sum(hand, axis=1) > 0, as_bool=True) # the sets that the player holds
         }
     
