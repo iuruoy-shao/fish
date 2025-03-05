@@ -41,10 +41,10 @@ class QNetwork(nn.Module):
 
 # Q-Learning Agent
 class QLearningAgent:
-    def __init__(self, mask_dependencies, memory):
-        self.agent_index = mask_dependencies['agent_index'],
-        self.hand = mask_dependencies['hand'],
-        self.sets_remaining = mask_dependencies['sets_remaining'],
+    def __init__(self, memory):
+        # self.agent_index = mask_dependencies['agent_index'],
+        # self.hand = mask_dependencies['hand'],
+        # self.sets_remaining = mask_dependencies['sets_remaining'],
 
         self.memory = memory
         self.device = torch.device("mps" if torch.backends.mps.is_available() 
@@ -77,13 +77,13 @@ class QLearningAgent:
                    for act in player_action.keys() 
                    if player_action[act] is not None)
     
-    def action_masks(self):
-        return {
-            'call_set': self.sets_remaining, # the sets that remain
-            'call_cards': np.tile(self.cards_remaining[self.agent_index%2::2] > 0, (6, 1)), # the players on the team that still have cards
-            'ask_person': self.cards_remaining[(self.agent_index+1)%2::2] > 0, # the players on the opposing team that still have cards
-            'ask_set': (np.sum(self.hand, axis=1) > 0).astype(int), # the sets that the player holds
-        }
+    # def action_masks(self):
+    #     return {
+    #         'call_set': self.sets_remaining, # the sets that remain
+    #         'call_cards': np.tile(self.cards_remaining[self.agent_index%2::2] > 0, (6, 1)), # the players on the team that still have cards
+    #         'ask_person': self.cards_remaining[(self.agent_index+1)%2::2] > 0, # the players on the opposing team that still have cards
+    #         'ask_set': (np.sum(self.hand, axis=1) > 0).astype(int), # the sets that the player holds
+    #     }
     
     def train(self):
         if len(self.memory) < self.batch_size:
