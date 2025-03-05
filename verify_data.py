@@ -95,7 +95,7 @@ class FishGame:
 
         # encoding calls
         called_set = False
-        call = np.array([])
+        v_call = np.array([])
         for player in self.teammates(calling_p):
             c = np.zeros(6)
             if player in call:
@@ -105,10 +105,10 @@ class FishGame:
                         state_array = np.concatenate((state_array, card_to_vector[card][6:]))
                     c += card_to_vector[card][:6]
             c = c > 0
-            call = np.concatenate((call, c))
+            v_call = np.concatenate((v_call, c))
 
         # encoding status
-        state_array = np.concatenate((state_array, call.T, np.array([status]), np.zeros(20)))
+        state_array = np.concatenate((state_array, v_call.T, np.zeros(24-len(v_call.T)), np.array([status]), np.zeros(11)))
         return state_array
 
     def construct_ask_vector(self, ask):
@@ -181,11 +181,3 @@ class FishGame:
             raise ParseError(f"Score is invalid {score} {self.score}")
         if not any(hands[-1].values()):
             self.hands = hands
-
-def repl_func(match: re.Match):
-    return " ".join(match.group().split())
-
-if __name__ == "__main__":
-    with open("data/12-3_14:05.txt", "r") as f:
-        game = FishGame(f.readlines())
-        print(game.mask_dependencies(game.players[0])[0])

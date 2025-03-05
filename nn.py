@@ -108,5 +108,3 @@ class QLearningAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-
-agent = QLearningAgent()
