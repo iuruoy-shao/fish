@@ -147,7 +147,7 @@ class FishGame:
             'reward': np.array(-self.rewards[i] if oddness 
                                else self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
-                'call': np.array(is_call(i)).reshape(-1),
+                'call': np.array([1,0] if is_call(i) else [0,1]),
                 'call_set': self.state[i][1:1+9] if is_call(i) else None,
                 'call_cards': self.state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
                 'ask_person': self.state[i][9:9+8][not oddness::2] if is_ask(i) else None, 
@@ -183,6 +183,8 @@ class FishGame:
             elif self.parse_ask(line)['status']: # asking
                 ask = self.parse_ask(line)
                 hands.append(self.try_ask(ask, hands[-1], i))
+            else: # unsuccessful ask
+                hands.append(hands[-1])
         if score != self.score:
             raise ParseError(f"Score is invalid {score} {self.score}")
         if not any(hands[-1].values()):

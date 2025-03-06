@@ -11,7 +11,7 @@ class QNetwork(nn.Module):
         self.fc2 = nn.Linear(1024, 256)
         self.fc3 = nn.Linear(256, 64)
 
-        self.to_call = nn.Linear(64, 1) 
+        self.to_call = nn.Linear(64, 2) 
         self.pick_call_set = nn.Linear(64, 9)
         self.pick_call_cards = nn.Linear(64 + 9, 24) # will pick top value for a single section of len 4
 
@@ -30,7 +30,7 @@ class QNetwork(nn.Module):
         ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
-            'call': torch.sigmoid(to_call),
+            'call': F.softmax(to_call, dim=1),
             'call_set': F.softmax(call_set.masked_fill(~action_masks['call_set'], -1e9), dim=1),
             'call_cards': F.softmax(call_cards.masked_fill(~action_masks['call_cards'], -1e9), dim=2),
             'ask_person': F.softmax(ask_person.masked_fill(~action_masks['ask_person'], -1e9), dim=1),
@@ -77,7 +77,7 @@ class QLearningAgent:
             pass
 
     def max_q(self, action, i):
-        if action['call'][i] > .5:
+        if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i]).item()
         return torch.max(action['ask_card'][i]).item()
 
