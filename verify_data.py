@@ -21,7 +21,7 @@ class FishGame:
         self.init_hands = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(',')) for player in self.datarows[0].split()}
         self.players = list(self.init_hands.keys())
         self.score = [0, 0]
-        self.rewards = [] # encodes for the odd team, reverse for even team
+        self.rewards = [] # encodes for even team, reverse for odd team
         self.verify()
         self.to_state()
 
@@ -139,16 +139,18 @@ class FishGame:
                                 np.zeros((200-i-1,54))))
 
     def memory(self, player):
+        oddness = self.players.index(player)%2
         is_ask = lambda i: not self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
         is_call = lambda i: self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
         return [{
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
-            'reward': np.array(self.rewards[i]).reshape((1,1)),
+            'reward': np.array(~self.rewards[i] if oddness 
+                               else self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
-                'call': np.array(is_call(i)).reshape((1,1)),
+                'call': np.array(is_call(i)).reshape(-1),
                 'call_set': self.state[i][1:1+9] if is_call(i) else None,
                 'call_cards': self.state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
-                'ask_person': self.state[i][9:9+8][(self.players.index(player)+1)%2::2] if is_ask(i) else None, 
+                'ask_person': self.state[i][9:9+8][~oddness::2] if is_ask(i) else None, 
                 'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
                 'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },

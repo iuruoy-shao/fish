@@ -24,27 +24,23 @@ class QNetwork(nn.Module):
         x = self.fc3(self.fc2(self.fc1(x)))
         to_call = self.to_call(x)
         call_set = self.pick_call_set(x)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1,6,4))
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1, 6, 4))
         ask_person = self.pick_person(x)
         ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
         ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
 
-        return { # masking & normalizing
-            'call': F.sigmoid(to_call),
-            'call_set': F.softmax(call_set.masked_fill(~action_masks['call_set'], -1e9)),
+        return {  # masking & normalizing
+            'call': torch.sigmoid(to_call),
+            'call_set': F.softmax(call_set.masked_fill(~action_masks['call_set'], -1e9), dim=1),
             'call_cards': F.softmax(call_cards.masked_fill(~action_masks['call_cards'], -1e9), dim=2),
-            'ask_person': F.softmax(ask_person.masked_fill(~action_masks['ask_person'], -1e9)),
-            'ask_set': F.softmax(ask_set.masked_fill(~action_masks['ask_set'], -1e9)),
+            'ask_person': F.softmax(ask_person.masked_fill(~action_masks['ask_person'], -1e9), dim=1),
+            'ask_set': F.softmax(ask_set.masked_fill(~action_masks['ask_set'], -1e9), dim=1),
             'ask_card': F.softmax(ask_card), 
         }
 
 # Q-Learning Agent
 class QLearningAgent:
     def __init__(self, memory):
-        # self.agent_index = mask_dependencies['agent_index'],
-        # self.hand = mask_dependencies['hand'],
-        # self.sets_remaining = mask_dependencies['sets_remaining'],
-
         self.memory = memory
         self.device = torch.device("mps" if torch.backends.mps.is_available() 
                                    else "cuda" if torch.cuda.is_available() 
@@ -55,7 +51,7 @@ class QLearningAgent:
         
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
-        self.batch_size = 6
+        self.batch_size = 20
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -65,24 +61,29 @@ class QLearningAgent:
     def input_actions():
         pass
         
-    def act(self, state): #TODO: complete
+    def act(self, state):  # TODO: complete
         # Convert state to tensor and add batch dimension
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            action_values = self.q_network(state) # return action valeus
-        if random.random() < self.epsilon: # explore
+            action_values = self.q_network(state)  # return action values
+        if random.random() < self.epsilon:  # explore
             pass
-        else: # exploit
+        else:  # exploit
             pass
 
+    def max_q(self, action, i):
+        if action['call'][i] > .5:
+            return torch.max(action['call_cards'][i]).item()
+        return torch.max(action['ask_card'][i]).item()
+
     def q_loss(self, action, next_action, player_action, reward):
-        loss = lambda prev, next, player, reward: F.mse_loss(sum(prev * player), 
-                                                             reward + self.gamma * torch.max(next).item())
+        loss = lambda prev, max_q_next, player, reward: F.mse_loss(sum(prev * player), 
+                                                                   reward + self.gamma * max_q_next)
         return sum(
             sum(
                 loss(
                     action[act][i],
-                    next_action[act][i],
+                    self.max_q(next_action, i),
                     self.tensor(player_action[act][i]),
                     self.tensor(reward[i]),
                 )
@@ -95,26 +96,23 @@ class QLearningAgent:
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
-            'call_set': self.tensor(sets_remaining, as_bool=True), # the sets that remain
-            'call_cards': self.tensor([np.tile(np.array(cards_remaining)[i,index%2::2] > 0, (6,1)) 
-                                       for i, index in enumerate(agent_index)], as_bool=True), # the players on the team that still have cards
-            'ask_person': self.tensor([np.array(cards_remaining)[i,(index+1)%2::2] > 0 
-                                       for i, index in enumerate(agent_index)], as_bool=True), # the players on the opposing team that still have cards
-            'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True) # the sets that the player holds
+            'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
+            'call_cards': self.tensor([np.tile(np.array(cards_remaining)[i, index % 2::2] > 0, (6, 1)) 
+                                       for i, index in enumerate(agent_index)], as_bool=True),  # the players on the team that still have cards
+            'ask_person': self.tensor([np.array(cards_remaining)[i, (index + 1) % 2::2] > 0 
+                                       for i, index in enumerate(agent_index)], as_bool=True),  # the players on the opposing team that still have cards
+            'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
         }
     
     def unpack_batch(self, batch):
-        result = {}
-        if not batch:
-            return result
-        keys = batch[0].keys()
-        
-        for key in keys:
-            if isinstance(batch[0][key], dict):
-                result[key] = self.unpack_batch([item[key] for item in batch])
-            else:
-                result[key] = [item[key] for item in batch]
-        return result
+        return {
+            key: (
+                self.unpack_batch([item[key] for item in batch])
+                if isinstance(batch[0][key], dict)
+                else [item[key] for item in batch]
+            )
+            for key in batch[0].keys()
+        }
     
     def train(self, n_epochs):    
         for epoch in range(n_epochs):
