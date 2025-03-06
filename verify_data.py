@@ -144,13 +144,13 @@ class FishGame:
         is_call = lambda i: self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
         return [{
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
-            'reward': np.array(~self.rewards[i] if oddness 
+            'reward': np.array(-self.rewards[i] if oddness 
                                else self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array(is_call(i)).reshape(-1),
                 'call_set': self.state[i][1:1+9] if is_call(i) else None,
                 'call_cards': self.state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
-                'ask_person': self.state[i][9:9+8][~oddness::2] if is_ask(i) else None, 
+                'ask_person': self.state[i][9:9+8][not oddness::2] if is_ask(i) else None, 
                 'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
                 'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },

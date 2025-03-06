@@ -47,11 +47,16 @@ class QLearningAgent:
                                    else "cpu")
         
         self.q_network = QNetwork().to(self.device)
-        self.optimizer = torch.optim.Adam(self.q_network.parameters())
+        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
+        # Add learning rate scheduler
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=5, 
+            verbose=True, min_lr=1e-6
+        )
         
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
-        self.batch_size = 20
+        self.batch_size = 32
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -114,21 +119,35 @@ class QLearningAgent:
             for key in batch[0].keys()
         }
     
-    def train(self, n_epochs):    
+    def train(self, n_epochs):
         for epoch in range(n_epochs):
             random.shuffle(self.memory)
             total_loss = 0
+            batch_count = 0
 
             for i in range(0, len(self.memory), self.batch_size):
-                batch = self.unpack_batch(self.memory[i:i + self.batch_size])
+                if i + self.batch_size > len(self.memory):
+                    continue
+
+                batch = self.unpack_batch(self.memory[i:i+self.batch_size])
                 current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
                 next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
                 
                 loss = self.q_loss(current_q, next_q, batch['action'], batch['reward'])
                 total_loss += loss.item()
+                batch_count += 1
 
                 self.optimizer.zero_grad()
                 loss.backward()
+                # Gradient clipping to prevent exploding gradients
+                torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
                 self.optimizer.step()
             
-            print(f"epoch {epoch}, loss {total_loss}, lr {self.optimizer.param_groups[0]['lr']}")
+            # Calculate average loss for this epoch
+            avg_loss = total_loss / batch_count if batch_count > 0 else float('inf')
+            
+            # Update learning rate based on loss
+            self.scheduler.step(avg_loss)
+            current_lr = self.optimizer.param_groups[0]['lr']
+            
+            print(f"epoch {epoch}, loss {avg_loss:.5f}, lr {current_lr}")
