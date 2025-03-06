@@ -47,10 +47,10 @@ class QLearningAgent:
                                    else "cpu")
         
         self.q_network = QNetwork().to(self.device)
-        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.005)
         # Add learning rate scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=5, 
+            self.optimizer, mode='min', factor=0.8, patience=5, 
             verbose=True, min_lr=1e-6
         )
         
