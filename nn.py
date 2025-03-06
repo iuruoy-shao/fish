@@ -55,7 +55,7 @@ class QLearningAgent:
         
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
-        self.batch_size = 32
+        self.batch_size = 6
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -133,4 +133,4 @@ class QLearningAgent:
                 loss.backward()
                 self.optimizer.step()
             
-            print(f"epoch {epoch}, loss {total_loss}")
+            print(f"epoch {epoch}, loss {total_loss}, lr {self.optimizer.param_groups[0]['lr']}")
