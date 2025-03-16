@@ -158,7 +158,7 @@ class FishGame:
             'next_state': self.get_state(i+1, player),
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in range(len(self.hands)-1) if is_player(i)]
+        } for i in range(len(self.hands)-1)]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
