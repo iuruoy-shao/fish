@@ -9,7 +9,9 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
-        self.fc3 = nn.Linear(256, 64)
+        
+        self.call_head = nn.Linear(256, 64)
+        self.ask_head = nn.Linear(256, 64)
 
         self.to_call = nn.Linear(64, 2) 
         self.pick_call_set = nn.Linear(64, 9)
@@ -23,14 +25,17 @@ class QNetwork(nn.Module):
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
         
-        to_call = self.to_call(x)
-        call_set = self.pick_call_set(x)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1, 6, 4))
-        ask_person = self.pick_person(x)
-        ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
+        call_head = F.relu(self.call_head(x))
+        ask_head = F.relu(self.ask_head(x))
+
+        to_call = self.to_call(call_head)
+        call_set = self.pick_call_set(call_head)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), 1)), (-1, 6, 4))
+        
+        ask_person = self.pick_person(ask_head)
+        ask_set = self.pick_ask_set(torch.cat((ask_head, ask_person), 1))
+        ask_card = self.pick_ask_card(torch.cat((ask_head, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
             'call': F.softmax(to_call, dim=1),
