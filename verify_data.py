@@ -140,8 +140,9 @@ class FishGame:
 
     def memory(self, player):
         oddness = self.players.index(player)%2
-        is_ask = lambda i: not self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
-        is_call = lambda i: self.state[i][0] and all(self.state[i][1:9] == self.encode_player(player))
+        is_player = lambda i: all(self.state[i][1:9] == self.encode_player(player))
+        is_ask = lambda i: not self.state[i][0] and is_player(i)
+        is_call = lambda i: self.state[i][0] and is_player(i)
         return [{
             'state': self.get_state(i, player), # invert sequential order, pad up to 200,
             'reward': np.array(-self.rewards[i] if oddness 
@@ -157,7 +158,7 @@ class FishGame:
             'next_state': self.get_state(i+1, player),
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in range(len(self.hands)-1)]
+        } for i in range(len(self.hands)-1) if is_player(i)]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)

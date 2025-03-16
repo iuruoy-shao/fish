@@ -18,16 +18,13 @@ class QNetwork(nn.Module):
         self.pick_person = nn.Linear(64, 4)
         self.pick_ask_set = nn.Linear(64 + 4, 9)
         self.pick_ask_card = nn.Linear(64 + 4 + 9, 6)
-
-        self.dropout = nn.Dropout(0.2)
         
     def forward(self, x, action_masks):
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
         x = F.relu(self.fc2(x))
-        x = self.dropout(x)
         x = F.relu(self.fc3(x))
+        
         to_call = self.to_call(x)
         call_set = self.pick_call_set(x)
         call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1, 6, 4))
@@ -53,7 +50,7 @@ class QLearningAgent:
                                    else "cpu")
         
         self.q_network = QNetwork().to(self.device)
-        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.005)
+        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
         # Add learning rate scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode='min', factor=0.8, patience=5, 
