@@ -128,7 +128,7 @@ class QLearningAgent:
         }
     
     def train_on_data(self, memory, n_epochs):
-        memory = self.memory
+        self.memory = memory
         
         for epoch in range(n_epochs):
             random.shuffle(self.memory)
