@@ -1,7 +1,6 @@
 import copy
 import json
 import numpy as np
-import re
 
 with open('sets.json','r') as f:
     sets = np.array(json.load(f))
@@ -86,7 +85,7 @@ class FishGame:
     
     def construct_call_vector(self, call):
         calling_p, call, status = call.values()
-        self.rewards.append(-1 if self.initials_to_index(calling_p) == status else 1) # award for beneficiary
+        self.rewards.append(-1 if (self.initials_to_index(calling_p) % 2) == status else 1) # award for beneficiary
         state_array = np.array([1]) # call indicator
 
         # encoding caller
