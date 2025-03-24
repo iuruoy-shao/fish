@@ -23,7 +23,6 @@ class FishGame:
         self.score = [0, 0]
         self.rewards = [] # encodes for even team, reverse for odd team
         self.verify()
-        self.to_state()
 
     def initials_to_index(self, initials):
         return self.players.index(initials)
@@ -102,8 +101,8 @@ class FishGame:
                 for card in call[player]:
                     if not called_set:
                         called_set = True
-                        state_array = np.concatenate((state_array, card_to_vector[card][6:]))
-                    c += card_to_vector[card][:6]
+                        state_array = np.concatenate((state_array, card_to_vector[card][:9]))
+                    c += card_to_vector[card][9:]
             c = c > 0
             v_call = np.concatenate((v_call, c))
 
@@ -122,9 +121,10 @@ class FishGame:
                                np.zeros(21)))
         
     def to_state(self):
-        self.state = np.zeros((len(self.datarows[1:-1]),54), dtype=int)
+        state = np.zeros((len(self.datarows[1:-1]),54), dtype=int)
         for i, line in enumerate(self.datarows[1:-1]):
-            self.state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
+            state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
+        return state
 
     def encode_hand(self, hand, flatten=True):
         hand_vector = np.zeros((9,6), dtype=int)
@@ -132,30 +132,32 @@ class FishGame:
             hand_vector[np.where(sets == card)[0][0]][np.where(sets == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
-    def get_state(self, i, player, pad=True):
+    def get_state(self, i, player, ordered_state, pad=True):
         i = i if i < len(self.hands) else -1
         return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
-                                self.state[:i][::-1],
-                                np.zeros((200-i-1,54))))
+                               ordered_state[:i][::-1],
+                               np.zeros((200-i-1,54))))
 
     def memory(self, player):
-        oddness = self.players.index(player)%2
-        is_player = lambda i: all(self.state[i][1:9] == self.encode_player(player))
-        is_ask = lambda i: not self.state[i][0] and is_player(i)
-        is_call = lambda i: self.state[i][0] and is_player(i)
+        self.players = self.players[self.players.index(player):] + self.players[:self.players.index(player)] # changing order
+        state = self.to_state() # get state with order shifting
+        json.dump(state.tolist(), open('state.json', 'w'))
+
+        is_player = lambda i: all(state[i][1:9] == self.encode_player(player))
+        is_ask = lambda i: not state[i][0] and is_player(i)
+        is_call = lambda i: state[i][0] and is_player(i)
         return [{
-            'state': self.get_state(i, player), # invert sequential order, pad up to 200,
-            'reward': np.array(-self.rewards[i] if oddness 
-                               else self.rewards[i]).reshape(-1), # invert if player on odd team
+            'state': self.get_state(i, player, state), # invert sequential order, pad up to 200,
+            'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
-                'call_set': self.state[i][1:1+9] if is_call(i) else None,
-                'call_cards': self.state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
-                'ask_person': self.state[i][9:9+8][not oddness::2] if is_ask(i) else None, 
-                'ask_set': self.state[i][9+8:9+8+9] if is_ask(i) else None,
-                'ask_card': self.state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
+                'call_set': state[i][1:1+9] if is_call(i) else None,
+                'call_cards': state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
+                'ask_person': state[i][9:9+8][1::2] if is_ask(i) else None, 
+                'ask_set': state[i][9+8:9+8+9] if is_ask(i) else None,
+                'ask_card': state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
             },
-            'next_state': self.get_state(i+1, player),
+            'next_state': self.get_state(i+1, player, state),
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
         } for i in range(len(self.hands)-1)]
