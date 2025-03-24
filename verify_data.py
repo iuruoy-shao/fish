@@ -141,7 +141,6 @@ class FishGame:
     def memory(self, player):
         self.players = self.players[self.players.index(player):] + self.players[:self.players.index(player)] # changing order
         state = self.to_state() # get state with order shifting
-        json.dump(state.tolist(), open('state.json', 'w'))
 
         is_player = lambda i: all(state[i][1:9] == self.encode_player(player))
         is_ask = lambda i: not state[i][0] and is_player(i)
