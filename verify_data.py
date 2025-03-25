@@ -104,9 +104,8 @@ class FishGame:
                     c += card_to_vector[card][9:]
             c = c > 0
             v_call = np.concatenate((v_call, c))
-
         # encoding status
-        state_array = np.concatenate((state_array, v_call.T, np.zeros(24-len(v_call.T)), np.array([status]), np.zeros(11)))
+        state_array = np.concatenate((state_array, np.pad(v_call,(0,24-len(v_call))).reshape(4,6).T.flatten(), np.array([status]), np.zeros(11)))
         return state_array
 
     def construct_ask_vector(self, ask):
