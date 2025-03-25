@@ -56,11 +56,11 @@ class QLearningAgent:
         
         self.q_network = QNetwork().to(self.device)
         self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
-        # Add learning rate scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode='min', factor=0.8, patience=5, 
             verbose=True, min_lr=1e-6
         )
+        self.loss = nn.MSELoss()
         
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
@@ -86,25 +86,33 @@ class QLearningAgent:
 
     def max_q(self, action, i):
         if torch.argmax(action['call'][i]) == 0:
-            return torch.max(action['call_cards'][i]).item()
-        return torch.max(action['ask_card'][i]).item()
+            return torch.max(action['call_cards'][i])
+        return torch.max(action['ask_card'][i])
+    
+    def q_vals(self, prev, max_q_next, player, reward): 
+        return torch.sum(prev * player), reward + self.gamma * max_q_next
 
     def q_loss(self, action, next_action, player_action, reward):
-        loss = lambda prev, max_q_next, player, reward: F.mse_loss(sum(prev * player), 
-                                                                   reward + self.gamma * max_q_next)
-        return sum(
-            sum(
-                loss(
-                    action[act][i],
-                    self.max_q(next_action, i),
-                    self.tensor(player_action[act][i]),
-                    self.tensor(reward[i]),
-                )
-                for act in player_action.keys()
-                if player_action[act][i] is not None
-            )
-            for i in range(len(reward))
-        )
+        current_q = []
+        target_q = []
+        for i in range(len(reward)):
+            for act in player_action.keys():
+                if player_action[act][i] is None:
+                    continue # skip Nones
+                this_reward = self.max_q(next_action, i)
+                this_max_q = self.max_q(action, i)
+                this_action = action[act][i]
+                this_player_action = self.tensor(player_action[act][i])
+                if act == 'call_cards':
+                    for row in range(6):
+                        current, target = self.q_vals(this_action[row], this_max_q, this_player_action[row], this_reward)
+                        current_q.append(current)
+                        target_q.append(target)
+                else:
+                    current, target = self.q_vals(this_action, this_max_q, this_player_action, this_reward)
+                    current_q.append(current)
+                    target_q.append(target)
+        return self.loss(torch.stack(current_q), torch.stack(target_q))
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
