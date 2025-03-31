@@ -14,6 +14,7 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
+        self.dropout = nn.Dropout(0.2)
         
         self.call_head = nn.Linear(256, 64)
         self.ask_head = nn.Linear(256, 64)
@@ -29,10 +30,14 @@ class QNetwork(nn.Module):
     def forward(self, x, action_masks):
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
+        x = self.dropout(x)
         x = F.relu(self.fc2(x))
+        x = self.dropout(x)
         
         call_head = F.relu(self.call_head(x))
+        call_head = self.dropout(call_head)
         ask_head = F.relu(self.ask_head(x))
+        ask_head = self.dropout(ask_head)
 
         to_call = self.to_call(call_head)
         call_set = self.pick_call_set(call_head)
