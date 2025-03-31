@@ -1,9 +1,13 @@
+from verify_data import FishGame # refactor fish game to include parser separately, or create new class for simulating a game 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
 import os
+
+class SimulatedFishGame(FishGame):
+    pass
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -74,7 +78,9 @@ class QLearningAgent:
     def input_actions():
         pass
         
-    def act(self, state):  # TODO: complete
+    def act(self, state, mask):  # TODO: complete
+        # set up some sort of hiearchy parser here
+        q_vals = self.q_network(state, mask)
         # Convert state to tensor and add batch dimension
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
@@ -135,8 +141,14 @@ class QLearningAgent:
             for key in batch[0].keys()
         }
     
-    def train_on_data(self, memory, n_epochs):
-        self.memory = memory
+    def handle_batch(self, batch):
+        current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
+        next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
+                
+        return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
+    
+    def train_on_data(self, train_memory, test_memory, n_epochs):
+        self.memory = train_memory
         
         for epoch in range(n_epochs):
             random.shuffle(self.memory)
@@ -148,26 +160,32 @@ class QLearningAgent:
                     continue
 
                 batch = self.unpack_batch(self.memory[i:i+self.batch_size])
-                current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
-                next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
-                
-                loss = self.q_loss(current_q, next_q, batch['action'], batch['reward'])
-                total_loss += loss.item()
+                loss = self.handle_batch(batch)
+                total_loss += loss
                 batch_count += 1
 
                 self.optimizer.zero_grad()
                 loss.backward()
-
                 torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
                 self.optimizer.step()
             
-            avg_loss = total_loss / batch_count if batch_count > 0 else float('inf')
+            train_avg_loss = total_loss / batch_count if batch_count > 0 else float('inf')
             
-            self.scheduler.step(avg_loss)
+            with torch.no_grad():
+                batch = self.unpack_batch(test_memory)
+                test_loss = self.handle_batch(batch)
+            
+            self.scheduler.step(train_avg_loss)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"epoch {epoch}, loss {avg_loss:.5f}, lr {current_lr}")
+            print(f"epoch {epoch}, train loss {train_avg_loss:.5f}, test loss {test_loss:.5f}, lr {current_lr}")
     
+    def train_self_play(self):
+        starting_hands = '' # scramble
+        game = FishGame('')
+        # Placeholder for self-play training logic
+        pass
+
     def save_model(self, path='model.pth'):
         torch.save({
             'model_state_dict': self.q_network.state_dict(),
