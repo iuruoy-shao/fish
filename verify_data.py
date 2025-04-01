@@ -213,6 +213,10 @@ class SimulatedFishGame(FishGame):
         random.shuffle(cards)
         for i, initials in enumerate(self.players):
             self.init_hands[initials] = set(cards[i*hand_length:(i+1)*hand_length])
+
+    def random_pass(self):
+        valid_teammates = [teammate for teammate in self.teammates(self.turn) if self.hands[-1][teammate]]
+        self.turn = random.choice(valid_teammates)
     
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
@@ -222,9 +226,12 @@ class SimulatedFishGame(FishGame):
             move = self.handle_call(action, new_hands, player)
         else:
             move = self.handle_ask(action, new_hands, player)
-        print(new_hands, move)
+
         self.hands.append(new_hands)
         self.datarows.append(move)
+
+        if not new_hands[self.turn]: # if the player whose turn it is runs out of cards, pass to teammate with cards
+            self.random_pass()
 
     def handle_call(self, action, new_hands, player):
         call_set = np.argmax(action['call_set'])
