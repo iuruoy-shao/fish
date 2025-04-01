@@ -1,4 +1,4 @@
-from verify_data import FishGame # refactor fish game to include parser separately, or create new class for simulating a game 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,15 +6,12 @@ import numpy as np
 import random
 import os
 
-class SimulatedFishGame(FishGame):
-    pass
-
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.1)
         
         self.call_head = nn.Linear(256, 64)
         self.ask_head = nn.Linear(256, 64)
@@ -29,15 +26,11 @@ class QNetwork(nn.Module):
         
     def forward(self, x, action_masks):
         x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout(x)
+        x = self.dropout(F.relu(self.fc1(x)))
+        x = self.dropout(F.relu(self.fc2(x)))
         
-        call_head = F.relu(self.call_head(x))
-        call_head = self.dropout(call_head)
-        ask_head = F.relu(self.ask_head(x))
-        ask_head = self.dropout(ask_head)
+        call_head = self.dropout(F.relu(self.call_head(x)))
+        ask_head = self.dropout(F.relu(self.ask_head(x)))
 
         to_call = self.to_call(call_head)
         call_set = self.pick_call_set(call_head)
