@@ -6,13 +6,14 @@ import random
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 
 with open('sets.json','r') as f:
-    sets = np.array(json.load(f))
+    sets = json.load(f)
+    sets_array = np.array(sets)
     card_to_vector = {}
-    for card in sets.flatten():
+    for card in sets_array.flatten():
         vector = np.zeros(15, int)
-        vector[np.where(sets == card)[0][0]] = 1
-        vector[np.where(sets == card)[1][0] + 9] = 1
-        card_to_vector[card] = vector
+        vector[np.where(sets_array == card)[0][0]] = 1
+        vector[np.where(sets_array == card)[1][0] + 9] = 1
+        card_to_vector[str(card)] = vector
 
 class ParseError(Exception):
     pass
@@ -207,8 +208,8 @@ class SimulatedFishGame(FishGame):
         self.turn = random.choice(self.players)
 
     def assign_hands(self):
-        cards = list(card_to_vector.keys())[:-6 if self.n_players == 8 else -1] # remove extra set 
-        hand_length = cards / self.n_players
+        cards = list(card_to_vector.keys())[:-6 if self.n_players == 8 else None] # remove extra set 
+        hand_length = len(cards) // self.n_players
         random.shuffle(cards)
         for i, initials in enumerate(self.players):
             self.init_hands[initials] = set(cards[i*hand_length:(i+1)*hand_length])
@@ -216,20 +217,20 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        is_call = action['is_call'][0] > action['is_call'][1]
+        is_call = action['call'][0] > action['call'][1]
         if is_call:
-            move = self.handle_move(action, new_hands, player)
+            move = self.handle_call(action, new_hands, player)
         else:
             move = self.handle_ask(action, new_hands, player)
         print(new_hands, move)
         self.hands.append(new_hands)
-        self.actions.append(move)
+        self.datarows.append(move)
 
-    def handle_move(self, action, new_hands, player):
+    def handle_call(self, action, new_hands, player):
         call_set = np.argmax(action['call_set'])
         call_cards = np.argmax(action['call_cards'], axis=1)
 
-        card_assignments = {ref_player:{} for ref_player in self.players[::2]}
+        card_assignments = {ref_player:set() for ref_player in self.players[::2]}
         success = True
         for card_index, player_index in enumerate(call_cards):
             ref_player = self.players[::2][player_index]
@@ -239,7 +240,7 @@ class SimulatedFishGame(FishGame):
 
         for hand in new_hands.values():
             hand -= set(sets[call_set])
-        return f'{player} {" ".join([f"{ref_player}:{card_assignments[ref_player]}" for ref_player in self.players[::2]])} {success}'
+        return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" for ref_player in self.players[::2]])} {int(success)}'
 
     def handle_ask(self, action, new_hands, player):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
