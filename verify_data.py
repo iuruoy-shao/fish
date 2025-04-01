@@ -1,6 +1,9 @@
 import copy
 import json
 import numpy as np
+import random
+
+agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 
 with open('sets.json','r') as f:
     sets = np.array(json.load(f))
@@ -136,8 +139,11 @@ class FishGame:
                                ordered_state[:i][::-1],
                                np.zeros((200-i-1,54))))
 
+    def rotate(self, player):
+        self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)] # changing order
+
     def memory(self, player):
-        self.players = self.players[self.players.index(player):] + self.players[:self.players.index(player)] # changing order
+        self.rotate(player)
         state = self.to_state() # get state with order shifting
 
         is_player = lambda i: all(state[i][1:9] == self.encode_player(player))
@@ -189,3 +195,59 @@ class FishGame:
             raise ParseError(f"Score is invalid {score} {self.score}")
         if not any(hands[-1].values()):
             self.hands = hands
+
+class SimulatedFishGame(FishGame):
+    def __init__(self, n_players):
+        self.init_hands = {}
+        self.n_players = n_players
+        self.players = agent_initials[:n_players]
+        self.assign_hands()
+        self.hands = [self.init_hands]
+        self.datarows = [str(self.init_hands)]
+        self.turn = random.choice(self.players)
+
+    def assign_hands(self):
+        cards = list(card_to_vector.keys())[:-6 if self.n_players == 8 else -1] # remove extra set 
+        hand_length = cards / self.n_players
+        random.shuffle(cards)
+        for i, initials in enumerate(self.players):
+            self.init_hands[initials] = set(cards[i*hand_length:(i+1)*hand_length])
+    
+    def parse_action(self, action, player):
+        new_hands = copy.deepcopy(self.hands[-1])
+        self.rotate(player)
+        is_call = action['is_call'][0] > action['is_call'][1]
+        if is_call:
+            move = self.handle_move(action, new_hands, player)
+        else:
+            move = self.handle_ask(action, new_hands, player)
+        print(new_hands, move)
+        self.hands.append(new_hands)
+        self.actions.append(move)
+
+    def handle_move(self, action, new_hands, player):
+        call_set = np.argmax(action['call_set'])
+        call_cards = np.argmax(action['call_cards'], axis=1)
+
+        card_assignments = {ref_player:{} for ref_player in self.players[::2]}
+        success = True
+        for card_index, player_index in enumerate(call_cards):
+            ref_player = self.players[::2][player_index]
+            card = sets[call_set][card_index]
+            success = success and (card in new_hands[ref_player])
+            card_assignments[ref_player].add(card)
+
+        for hand in new_hands.values():
+            hand -= set(sets[call_set])
+        return f'{player} {" ".join([f"{ref_player}:{card_assignments[ref_player]}" for ref_player in self.players[::2]])} {success}'
+
+    def handle_ask(self, action, new_hands, player):
+        ask_person = self.players[1::2][np.argmax(action['ask_person'])]
+        card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
+        success = card in new_hands[ask_person]
+        if success:
+            new_hands[ask_person].remove(card)
+            new_hands[player].add(card)
+        else:
+            self.turn = ask_person
+        return f"{player} {ask_person} {card} {int(success)}"
