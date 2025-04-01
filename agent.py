@@ -1,4 +1,4 @@
-
+from verify_data import SimulatedFishGame
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -72,21 +72,6 @@ class QLearningAgent:
         if as_bool:
             return torch.BoolTensor(x).to(self.device)
         return torch.FloatTensor(x).to(self.device)
-
-    def input_actions():
-        pass
-        
-    def act(self, state, mask):  # TODO: complete
-        # set up some sort of hiearchy parser here
-        q_vals = self.q_network(state, mask)
-        # Convert state to tensor and add batch dimension
-        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            action_values = self.q_network(state)  # return action values
-        if random.random() < self.epsilon:  # explore
-            pass
-        else:  # exploit
-            pass
 
     def max_q(self, action, i):
         if torch.argmax(action['call'][i]) == 0:
@@ -179,10 +164,21 @@ class QLearningAgent:
             print(f"epoch {epoch}, train loss {train_avg_loss:.5f}, test loss {test_loss:.5f}, lr {current_lr}")
     
     def train_self_play(self):
-        starting_hands = '' # scramble
-        game = FishGame('')
-        # Placeholder for self-play training logic
-        pass
+        game = SimulatedFishGame(random.choice([6,8]))
+        states = []
+        action_masks = []
+        for player in game.players_with_cards():
+            game.rotate(player)
+            states.append(game.to_state())
+            action_masks.append(game.mask_dep(-1, player))
+        print(self.unpack_batch(states), self.unpack_batch(action_masks))
+
+    def act(self, state, mask):
+        q_vals = self.q_network(state, mask)
+        for key in q_vals.keys():
+            q_vals[key] = q_vals[key].cpu().detach().numpy()
+            if random.random() < self.epsilon:
+                q_vals[key] = np.random.dirichlet(np.ones(q_vals[key]))
 
     def save_model(self, path='model.pth'):
         torch.save({

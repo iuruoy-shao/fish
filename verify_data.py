@@ -131,7 +131,7 @@ class FishGame:
     def encode_hand(self, hand, flatten=True):
         hand_vector = np.zeros((9,6), dtype=int)
         for card in hand:
-            hand_vector[np.where(sets == card)[0][0]][np.where(sets == card)[1][0]] = 1
+            hand_vector[np.where(sets_array == card)[0][0]][np.where(sets_array == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
     def get_state(self, i, player, ordered_state, pad=True):
@@ -217,6 +217,9 @@ class SimulatedFishGame(FishGame):
     def random_pass(self):
         valid_teammates = [teammate for teammate in self.teammates(self.turn) if self.hands[-1][teammate]]
         self.turn = random.choice(valid_teammates)
+
+    def players_with_cards(self):
+        return [player for player in self.players if self.hands[-1][player]]
     
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
