@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import random
 import os
+import pickle
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -163,23 +164,71 @@ class QLearningAgent:
             
             print(f"epoch {epoch}, train loss {train_avg_loss:.5f}, test loss {test_loss:.5f}, lr {current_lr}")
     
-    def train_self_play(self):
+    def pickle_memory(self, memory, path='memory.pkl'):
+        with open(path, 'wb') as f:
+            pickle.dump(memory, f)
+
+    def train_self_play(self, n_games, update_rate=5):
+        try:
+            with open('memory.pkl', 'rb') as f:
+                memories = pickle.load(f)
+        except (FileNotFoundError, EOFError):
+            memories = []
+        for i in range(n_games):
+            memories_batch = []
+            if i % update_rate == 0 and len(memories_batch):
+                batch = self.unpack_batch(memories_batch)
+                loss = self.handle_batch(batch)
+                self.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
+                self.optimizer.step()
+
+                print(f"simulation {i}, loss {loss:.5f}")
+                memories_batch = []
+                memories += memories_batch
+            memories_batch += self.simulate_game()
+
+    def simulate_game(self):
         game = SimulatedFishGame(random.choice([6,8]))
-        states = []
-        action_masks = []
-        for player in game.players_with_cards():
-            game.rotate(player)
-            states.append(game.to_state())
-            action_masks.append(game.mask_dep(-1, player))
-        print(self.unpack_batch(states), self.unpack_batch(action_masks))
+        while any(game.hands):
+            acted = False
+            actions = {}
+            for player in game.players_with_cards():
+                game.rotate(player)
+                print(len(game.hands))
+                state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
+                mask = self.action_masks(*self.unpack_batch([game.mask_dep(len(game.hands)-1, player)]).values())
+                action = self.act(state, mask)
+                actions[player] = action
+                if action['call'][0] > action['call'][1] and not acted:
+                    game.parse_action(action, player)
+                    acted = True
+            if not acted:
+                game.parse_action(actions[game.turn], game.turn)
+        
+        with open("sample_simulation.txt", "w") as f:
+            f.writelines(game.datarows)
+        memories = []
+        for player in game.players:
+            memories += game.memory(player)
+        return memories
 
     def act(self, state, mask):
-        q_vals = self.q_network(state, mask)
+        with torch.no_grad():
+            q_vals = self.q_network(state, mask)
+        result = {}
         for key in q_vals.keys():
-            q_vals[key] = q_vals[key].cpu().detach().numpy()
+            row_data = q_vals[key][0].cpu().detach().numpy()
             if random.random() < self.epsilon:
-                q_vals[key] = np.random.dirichlet(np.ones(q_vals[key]))
-
+                if key != 'call_cards':
+                    row_data = np.random.random(row_data.shape)
+                else:
+                    for i in range(6):
+                        row_data[i] = np.random.random(row_data[i].shape)
+            result[key] = row_data
+        return result
+    
     def save_model(self, path='model.pth'):
         torch.save({
             'model_state_dict': self.q_network.state_dict(),
