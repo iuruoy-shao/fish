@@ -262,3 +262,9 @@ class SimulatedFishGame(FishGame):
         else:
             self.turn = ask_person
         return f"{player} {ask_person} {card} {int(success)}"
+    
+    def to_state(self): # skip score
+        state = np.zeros((len(self.datarows[1:]),54), dtype=int)
+        for i, line in enumerate(self.datarows[1:]):
+            state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
+        return state
