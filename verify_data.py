@@ -88,6 +88,7 @@ class FishGame:
         return p
     
     def construct_call_vector(self, call):
+        print(call)
         calling_p, call, status = call.values()
         self.rewards.append(-1 if (self.initials_to_index(calling_p) % 2) == status else 1) # award for beneficiary
         state_array = np.array([1]) # call indicator
@@ -204,6 +205,7 @@ class SimulatedFishGame(FishGame):
         self.players = agent_initials[:n_players]
         self.assign_hands()
         self.hands = [self.init_hands]
+        self.rewards = []
         self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}']
         self.turn = random.choice(self.players)
 
@@ -216,7 +218,8 @@ class SimulatedFishGame(FishGame):
 
     def random_pass(self):
         valid_teammates = [teammate for teammate in self.teammates(self.turn) if self.hands[-1][teammate]]
-        self.turn = random.choice(valid_teammates)
+        if valid_teammates:
+            self.turn = random.choice(valid_teammates)
 
     def players_with_cards(self):
         return [player for player in self.players if self.hands[-1][player]]
@@ -250,7 +253,7 @@ class SimulatedFishGame(FishGame):
 
         for hand in new_hands.values():
             hand -= set(sets[call_set])
-        return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" for ref_player in self.players[::2]])} {int(success)}'
+        return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
 
     def handle_ask(self, action, new_hands, player):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
@@ -261,10 +264,11 @@ class SimulatedFishGame(FishGame):
             new_hands[player].add(card)
         else:
             self.turn = ask_person
-        return f"{player} {ask_person} {card} {int(success)}"
+        return f"{player} {ask_person} {card} {int(success)}\n"
     
     def to_state(self): # skip score
         state = np.zeros((len(self.datarows[1:]),54), dtype=int)
         for i, line in enumerate(self.datarows[1:]):
+            print(line)
             state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
         return state
