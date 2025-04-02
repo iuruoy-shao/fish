@@ -235,10 +235,10 @@ class QLearningAgent:
             row_data = q_vals[key][0].cpu().detach().numpy()
             if random.random() < self.epsilon:
                 if key != 'call_cards':
-                    row_data = np.random.random(row_data.shape) * (row_data > 0) # transfer masks
+                    row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
                 else:
                     for i in range(6):
-                        row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > 0)
+                        row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
             result[key] = row_data
         return result
     
