@@ -237,7 +237,7 @@ class QLearningAgent:
                     row_data = np.random.random(row_data.shape) * (row_data > 0) # transfer masks
                 else:
                     for i in range(6):
-                        row_data[i] = np.random.random(row_data[i].shape) * (row_data > 0)
+                        row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > 0)
             result[key] = row_data
         return result
     
