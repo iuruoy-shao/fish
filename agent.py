@@ -192,7 +192,7 @@ class QLearningAgent:
     def simulate_game(self):
         game = SimulatedFishGame(random.choice([6,8]))
         no_call_count = 0
-        while any(game.hands[-1]):
+        while not game.ended():
             acted = False
             actions = {}
             for player in game.players_with_cards():
@@ -204,7 +204,7 @@ class QLearningAgent:
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
                     acted = True
-            if not acted and any(game.hands[-1]):
+            if not acted and not game.ended():
                 if game.turn in game.players_with_cards():
                     game.parse_action(actions[game.turn], game.turn)
                 elif no_call_count < 3:
@@ -234,10 +234,10 @@ class QLearningAgent:
             row_data = q_vals[key][0].cpu().detach().numpy()
             if random.random() < self.epsilon:
                 if key != 'call_cards':
-                    row_data = np.random.random(row_data.shape)
+                    row_data = np.random.random(row_data.shape) * (row_data > 0) # transfer masks
                 else:
                     for i in range(6):
-                        row_data[i] = np.random.random(row_data[i].shape)
+                        row_data[i] = np.random.random(row_data[i].shape) * (row_data > 0)
             result[key] = row_data
         return result
     
