@@ -191,7 +191,8 @@ class QLearningAgent:
 
     def simulate_game(self):
         game = SimulatedFishGame(random.choice([6,8]))
-        while any(game.hands):
+        no_call_count = 0
+        while any(game.hands[-1]):
             acted = False
             actions = {}
             for player in game.players_with_cards():
@@ -203,9 +204,21 @@ class QLearningAgent:
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
                     acted = True
-            if not acted and game.turn in game.players_with_cards():
-                game.parse_action(actions[game.turn], game.turn)
-        
+            if not acted and any(game.hands[-1]):
+                if game.turn in game.players_with_cards():
+                    game.parse_action(actions[game.turn], game.turn)
+                elif no_call_count < 3:
+                    no_call_count += 1
+                else:
+                    call_confidences = {
+                        player: actions[player]['call'][0]
+                        for player in game.players_with_cards()
+                    }
+                    calling_player = max(call_confidences, key=call_confidences.get)
+                    actions[calling_player]['call'] = [1,0]
+                    game.parse_action(actions[calling_player], calling_player)
+                    no_call_count = 0
+
         with open("sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
