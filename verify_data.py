@@ -204,7 +204,7 @@ class SimulatedFishGame(FishGame):
         self.players = agent_initials[:n_players]
         self.assign_hands()
         self.hands = [self.init_hands]
-        self.datarows = [str(self.init_hands)]
+        self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}']
         self.turn = random.choice(self.players)
 
     def assign_hands(self):
