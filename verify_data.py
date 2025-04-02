@@ -89,7 +89,7 @@ class FishGame:
     
     def construct_call_vector(self, call):
         calling_p, call, status = call.values()
-        self.rewards.append(-1 if (self.initials_to_index(calling_p) % 2) == status else 1) # award for beneficiary
+        self.rewards.append(-1 if (self.initials_to_index(calling_p) % 2) == status else 1 if status else 0) # award for beneficiary, modified to not give reward for opponent miscalls
         state_array = np.array([1]) # call indicator
 
         # encoding caller
