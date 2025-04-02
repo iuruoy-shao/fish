@@ -208,6 +208,9 @@ class SimulatedFishGame(FishGame):
         self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}']
         self.turn = random.choice(self.players)
 
+    def ended(self):
+        return not any(self.hands[-1].values())
+
     def assign_hands(self):
         cards = list(card_to_vector.keys())[:-6 if self.n_players == 8 else None] # remove extra set 
         hand_length = len(cards) // self.n_players
