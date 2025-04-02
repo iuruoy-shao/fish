@@ -134,7 +134,7 @@ class QLearningAgent:
                 
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
-    def train_on_data(self, train_memory, test_memory, n_epochs):
+    def train_on_data(self, train_memory, test_memory, n_epochs, lr_schedule=True):
         self.memory = train_memory
         
         for epoch in range(n_epochs):
@@ -162,9 +162,10 @@ class QLearningAgent:
                 with torch.no_grad():
                     batch = self.unpack_batch(test_memory)
                     test_loss = self.handle_batch(batch)
-                
-            self.scheduler.step(train_avg_loss)
-            current_lr = self.optimizer.param_groups[0]['lr']
+            
+            if lr_schedule:
+                self.scheduler.step(train_avg_loss)
+                current_lr = self.optimizer.param_groups[0]['lr']
             
             print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, test loss {round(test_loss.item(), 5) if test_memory else None}, lr {current_lr}")
     
@@ -181,11 +182,11 @@ class QLearningAgent:
         memories_batch = []
         for i in range(n_games):
             if i % update_rate == 0 and len(memories_batch):
-                self.train_on_data(memories_batch, None, 1)
+                self.train_on_data(memories_batch, None, 3, lr_schedule=False)
                 memories_batch = []
                 memories += memories_batch
             if i % (update_rate * 5) == 0 and len(memories):
-                self.train_on_data(self.real_data, None, 1)
+                self.train_on_data(self.real_data, None, 3, lr_schedule=False)
                 self.pickle_memory(memories)
             memories_batch += self.simulate_game()
 
