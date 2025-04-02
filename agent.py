@@ -42,12 +42,12 @@ class QNetwork(nn.Module):
         ask_card = self.pick_ask_card(torch.cat((ask_head, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
-            'call': F.softmax(to_call, dim=1),
-            'call_set': F.softmax(call_set.masked_fill(~action_masks['call_set'], -1e9), dim=1),
-            'call_cards': F.softmax(call_cards.masked_fill(~action_masks['call_cards'], -1e9), dim=2),
-            'ask_person': F.softmax(ask_person.masked_fill(~action_masks['ask_person'], -1e9), dim=1),
-            'ask_set': F.softmax(ask_set.masked_fill(~action_masks['ask_set'], -1e9), dim=1),
-            'ask_card': F.softmax(ask_card), 
+            'call': to_call,
+            'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
+            'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
+            'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
+            'ask_set': ask_set.masked_fill(~action_masks['ask_set'], -1e9),
+            'ask_card': ask_card, 
         }
 
 # Q-Learning Agent
