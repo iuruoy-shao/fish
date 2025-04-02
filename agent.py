@@ -52,11 +52,13 @@ class QNetwork(nn.Module):
 
 # Q-Learning Agent
 class QLearningAgent:
-    def __init__(self):
+    def __init__(self, real_data=None):
+        if real_data is None:
+            real_data = []
         self.device = torch.device("mps" if torch.backends.mps.is_available() 
                                    else "cuda" if torch.cuda.is_available() 
                                    else "cpu")
-        
+
         self.q_network = QNetwork().to(self.device)
         self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -64,7 +66,8 @@ class QLearningAgent:
             verbose=True, min_lr=1e-6
         )
         self.loss = nn.MSELoss()
-        
+        self.real_data = real_data
+
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
         self.batch_size = 32
@@ -155,14 +158,15 @@ class QLearningAgent:
             
             train_avg_loss = total_loss / batch_count if batch_count > 0 else float('inf')
             
-            with torch.no_grad():
-                batch = self.unpack_batch(test_memory)
-                test_loss = self.handle_batch(batch)
-            
+            if test_memory:
+                with torch.no_grad():
+                    batch = self.unpack_batch(test_memory)
+                    test_loss = self.handle_batch(batch)
+                
             self.scheduler.step(train_avg_loss)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"epoch {epoch}, train loss {train_avg_loss:.5f}, test loss {test_loss:.5f}, lr {current_lr}")
+            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, test loss {round(test_loss.item(), 5) if test_memory else None}, lr {current_lr}")
     
     def pickle_memory(self, memory, path='memory.pkl'):
         with open(path, 'wb') as f:
@@ -174,19 +178,15 @@ class QLearningAgent:
                 memories = pickle.load(f)
         except (FileNotFoundError, EOFError):
             memories = []
+        memories_batch = []
         for i in range(n_games):
-            memories_batch = []
             if i % update_rate == 0 and len(memories_batch):
-                batch = self.unpack_batch(memories_batch)
-                loss = self.handle_batch(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
-                self.optimizer.step()
-
-                print(f"simulation {i}, loss {loss:.5f}")
+                self.train_on_data(memories_batch, None, 1)
                 memories_batch = []
                 memories += memories_batch
+            if i % (update_rate * 5) == 0 and len(memories):
+                self.train_on_data(self.real_data, None, 1)
+                self.pickle_memory(memories)
             memories_batch += self.simulate_game()
 
     def simulate_game(self):
