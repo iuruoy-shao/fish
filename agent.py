@@ -196,7 +196,6 @@ class QLearningAgent:
             actions = {}
             for player in game.players_with_cards():
                 game.rotate(player)
-                print(len(game.hands))
                 state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
                 mask = self.action_masks(*self.unpack_batch([game.mask_dep(len(game.hands)-1, player)]).values())
                 action = self.act(state, mask)
@@ -204,7 +203,7 @@ class QLearningAgent:
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
                     acted = True
-            if not acted:
+            if not acted and game.turn in game.players_with_cards():
                 game.parse_action(actions[game.turn], game.turn)
         
         with open("sample_simulation.txt", "w") as f:
