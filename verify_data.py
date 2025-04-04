@@ -141,7 +141,13 @@ class FishGame:
                                np.zeros((200-i-1,54))))
 
     def rotate(self, player):
+        self.rewards = []
         self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)] # changing order
+    
+    def last_hand_index(self, player):
+        for i, hand in enumerate(self.hands[::-1]):
+            if len(hand[player]):
+                return len(self.hands)-i
 
     def memory(self, player):
         self.rotate(player)
@@ -155,8 +161,8 @@ class FishGame:
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
-                'call_set': state[i][1:1+9] if is_call(i) else None,
-                'call_cards': state[i][1+9:1+9+24].reshape((6,4)) if is_call(i) else None,
+                'call_set': state[i][1+8:1+8+9] if is_call(i) else None,
+                'call_cards': state[i][1+8+9:1+8+9+24].reshape((6,4)) if is_call(i) else None,
                 'ask_person': state[i][9:9+8][1::2] if is_ask(i) else None, 
                 'ask_set': state[i][9+8:9+8+9] if is_ask(i) else None,
                 'ask_card': state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
@@ -164,7 +170,7 @@ class FishGame:
             'next_state': self.get_state(i+1, player, state),
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in range(len(self.hands)-1)]
+        } for i in range(self.last_hand_index(player))]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
@@ -177,7 +183,7 @@ class FishGame:
             'agent_index': self.players.index(player),
             'hand': self.encode_hand(self.hands[i][player], flatten=False), # 9x6
             'sets_remaining': self.sets_remaining(i),
-            'cards_remaining': np.array([len(hand) for hand in self.hands[i].values()] 
+            'cards_remaining': np.array([len(self.hands[i][player]) for player in self.players] 
                                         + ([0, 0] if len(self.players) == 6 else [])) # pad to length 8
         }
 
