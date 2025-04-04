@@ -109,7 +109,6 @@ class QLearningAgent:
                         print(act, this_action, this_player_action)
                     current_q.append(current)
                     target_q.append(target)
-        print(torch.stack(current_q), torch.stack(target_q))
         return self.loss(torch.stack(current_q), torch.stack(target_q))
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
