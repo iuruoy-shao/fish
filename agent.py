@@ -92,19 +92,24 @@ class QLearningAgent:
             for act in player_action.keys():
                 if player_action[act][i] is None:
                     continue # skip Nones
-                this_reward = self.max_q(next_action, i)
-                this_max_q = self.max_q(action, i)
+                this_reward = reward[i][0]
+                this_next_q = self.max_q(next_action, i)
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
                 if act == 'call_cards':
                     for row in range(6):
-                        current, target = self.q_vals(this_action[row], this_max_q, this_player_action[row], this_reward)
+                        current, target = self.q_vals(this_action[row], this_next_q, this_player_action[row], this_reward)
+                        if current < -9e8: # error checking
+                            print(act, this_action[row], this_player_action[row])
                         current_q.append(current)
                         target_q.append(target)
                 else:
-                    current, target = self.q_vals(this_action, this_max_q, this_player_action, this_reward)
+                    current, target = self.q_vals(this_action, this_next_q, this_player_action, this_reward)
+                    if current < -9e8:
+                        print(act, this_action, this_player_action)
                     current_q.append(current)
                     target_q.append(target)
+        print(torch.stack(current_q), torch.stack(target_q))
         return self.loss(torch.stack(current_q), torch.stack(target_q))
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
@@ -156,7 +161,7 @@ class QLearningAgent:
                 torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
                 self.optimizer.step()
             
-            train_avg_loss = total_loss / batch_count if batch_count > 0 else float('inf')
+            train_avg_loss = total_loss / batch_count
             
             if test_memory:
                 with torch.no_grad():
@@ -165,9 +170,8 @@ class QLearningAgent:
             
             if lr_schedule:
                 self.scheduler.step(train_avg_loss)
-                current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, test loss {round(test_loss.item(), 5) if test_memory else None}, lr {current_lr}")
+            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, test loss {round(test_loss.item(), 5) if test_memory else None}, lr {self.optimizer.param_groups[0]['lr']}")
     
     def pickle_memory(self, memory, path='memory.pkl'):
         with open(path, 'wb') as f:
