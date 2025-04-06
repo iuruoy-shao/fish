@@ -82,34 +82,34 @@ class QLearningAgent:
             return torch.max(action['call_cards'][i])
         return torch.max(action['ask_card'][i])
     
-    def q_vals(self, prev, max_q_next, player, reward): 
-        return torch.sum(prev * player), reward + self.gamma * max_q_next
+    def target_q(self, max_q_next, reward): 
+        return reward + self.gamma * max_q_next
 
     def q_loss(self, action, next_action, player_action, reward):
         current_q = []
-        target_q = []
+        rewards = []
+        next_qs = []
+
         for i in range(len(reward)):
+            this_reward = reward[i][0]
+            this_next_q = self.max_q(next_action, i)
             for act in player_action.keys():
                 if player_action[act][i] is None:
                     continue # skip Nones
-                this_reward = reward[i][0]
-                this_next_q = self.max_q(next_action, i)
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
                 if act == 'call_cards':
                     for row in range(6):
-                        current, target = self.q_vals(this_action[row], this_next_q, this_player_action[row], this_reward)
-                        if current < -9e8: # error checking
-                            print(act, this_action[row], this_player_action[row])
-                        current_q.append(current)
-                        target_q.append(target)
+                        current_q.append(this_action[row][torch.argmax(this_player_action[row])])
+                        rewards.append(this_reward)
+                        next_qs.append(this_next_q)
                 else:
-                    current, target = self.q_vals(this_action, this_next_q, this_player_action, this_reward)
-                    if current < -9e8:
-                        print(act, this_action, this_player_action)
-                    current_q.append(current)
-                    target_q.append(target)
-        return self.loss(torch.stack(current_q), torch.stack(target_q))
+                    current_q.append(this_action[torch.argmax(this_player_action)])
+                    rewards.append(this_reward)
+                    next_qs.append(this_next_q)
+        target_q = self.target_q(self.tensor(next_qs), self.tensor(rewards))
+        
+        return self.loss(torch.stack(current_q), target_q)
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
