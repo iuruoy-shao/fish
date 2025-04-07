@@ -178,7 +178,7 @@ class QLearningAgent:
         with open(path, 'wb') as f:
             pickle.dump(memory, f)
 
-    def train_self_play(self, n_games, update_rate=5):
+    def train_self_play(self, n_games, update_rate=5, path='models/model.pth'):
         try:
             with open('memory.pkl', 'rb') as f:
                 memories = pickle.load(f)
@@ -186,13 +186,15 @@ class QLearningAgent:
             memories = []
         memories_batch = []
         for i in range(n_games):
+            print(f"Game {i} finished, {len(memories_batch)} memories collected")
             if i % update_rate == 0 and len(memories_batch):
-                self.train_on_data(memories_batch, None, 3, lr_schedule=False)
+                self.train_on_data(memories_batch, None, 10, lr_schedule=False)
                 memories_batch = []
                 memories += memories_batch
-            if i % (update_rate * 5) == 0 and len(memories):
-                self.train_on_data(self.real_data, None, 3, lr_schedule=False)
+            if i % (update_rate * 3) == 0 and len(memories):
+                self.train_on_data(self.real_data, None, 10, lr_schedule=False)
                 self.pickle_memory(memories)
+                self.save_model(path)
             memories_batch += self.simulate_game()
 
     def simulate_game(self):
