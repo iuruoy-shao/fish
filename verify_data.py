@@ -104,11 +104,11 @@ class FishGame:
         calling_p, call, status = call.values()
         same_team = not self.initials_to_index(calling_p) % 2
         self.rewards.append(
-            rewards['correct_call'] if same_team 
-            else rewards['correct_opponent_call'] 
+            (rewards['correct_call'] if same_team 
+            else rewards['correct_opponent_call'] )
             if status else 
-            rewards['incorrect_call'] if same_team 
-            else rewards['incorrect_opponent_call']
+            (rewards['incorrect_call'] if same_team 
+            else rewards['incorrect_opponent_call'])
         )
         state_array = np.array([1]) # call indicator
 
@@ -136,11 +136,11 @@ class FishGame:
         asking_p, asked_p, card, status = ask.values()
         same_team = not self.initials_to_index(asking_p) % 2
         self.rewards.append(
-            rewards['correct_ask'] if same_team
-            else rewards['correct_opponent_ask']
+            (rewards['correct_ask'] if same_team
+            else rewards['correct_opponent_ask'])
             if status else 
-            rewards['incorrect_ask'] if same_team
-            else rewards['incorrect_opponent_ask']
+            (rewards['incorrect_ask'] if same_team
+            else rewards['incorrect_opponent_ask'])
         )
         return np.concatenate((np.array([0]), 
                                self.encode_player(asking_p),
@@ -238,7 +238,7 @@ class SimulatedFishGame(FishGame):
         self.assign_hands()
         self.hands = [self.init_hands]
         self.rewards = []
-        self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}']
+        self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}\n', 'temp_score']
         self.turn = random.choice(self.players)
 
     def ended(self):
@@ -269,7 +269,7 @@ class SimulatedFishGame(FishGame):
             move = self.handle_ask(action, new_hands, player)
 
         self.hands.append(new_hands)
-        self.datarows.append(move)
+        self.datarows.insert(-1, move)
 
         if not new_hands[self.turn]: # if the player whose turn it is runs out of cards, pass to teammate with cards
             self.random_pass()
@@ -300,9 +300,3 @@ class SimulatedFishGame(FishGame):
         else:
             self.turn = ask_person
         return f"{player} {ask_person} {card} {int(success)}\n"
-    
-    def to_state(self): # skip score
-        state = np.zeros((len(self.datarows[1:]),54), dtype=int)
-        for i, line in enumerate(self.datarows[1:]):
-            state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
-        return state
