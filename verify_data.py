@@ -5,6 +5,17 @@ import random
 
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 
+rewards = {
+    'incorrect_call': -5,
+    'correct_call': 1,
+    'correct_opponent_call': -1,
+    'incorrect_opponent_call': 0,
+    'incorrect_ask': -.1,
+    'correct_ask': .1,
+    'correct_opponent_ask': -.1,
+    'incorrect_opponent_ask': 0,
+}
+
 with open('sets.json','r') as f:
     sets = json.load(f)
     sets_array = np.array(sets)
@@ -91,7 +102,14 @@ class FishGame:
     
     def construct_call_vector(self, call):
         calling_p, call, status = call.values()
-        self.rewards.append(-1 if (self.initials_to_index(calling_p) % 2) == status else 1 if status else 0) # award for beneficiary, modified to not give reward for opponent miscalls
+        same_team = not self.initials_to_index(calling_p) % 2
+        self.rewards.append(
+            rewards['correct_call'] if same_team 
+            else rewards['correct_opponent_call'] 
+            if status else 
+            rewards['incorrect_call'] if same_team 
+            else rewards['incorrect_opponent_call']
+        )
         state_array = np.array([1]) # call indicator
 
         # encoding caller
@@ -115,8 +133,15 @@ class FishGame:
         return state_array
 
     def construct_ask_vector(self, ask):
-        self.rewards.append(0)
         asking_p, asked_p, card, status = ask.values()
+        same_team = not self.initials_to_index(asking_p) % 2
+        self.rewards.append(
+            rewards['correct_ask'] if same_team
+            else rewards['correct_opponent_ask']
+            if status else 
+            rewards['incorrect_ask'] if same_team
+            else rewards['incorrect_opponent_ask']
+        )
         return np.concatenate((np.array([0]), 
                                self.encode_player(asking_p),
                                self.encode_player(asked_p),
