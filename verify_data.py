@@ -6,12 +6,16 @@ import random
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 
 rewards = {
+    'correct_call': 5,
     'incorrect_call': -5,
-    'correct_call': 1,
+    'correct_team_call': 1,
+    'incorrect_team_call': -1,
     'correct_opponent_call': -1,
     'incorrect_opponent_call': 0,
-    'incorrect_ask': -.1,
-    'correct_ask': .1,
+    'correct_ask': .5,
+    'incorrect_ask': -.5,
+    'correct_team_ask': .1,
+    'incorrect_team_ask': -.1,
     'correct_opponent_ask': -.1,
     'incorrect_opponent_ask': 0,
 }
@@ -102,13 +106,17 @@ class FishGame:
     
     def construct_call_vector(self, call):
         calling_p, call, status = call.values()
+
+        is_self = self.initials_to_index(calling_p) == 0
         same_team = not self.initials_to_index(calling_p) % 2
         self.rewards.append(
-            (rewards['correct_call'] if same_team 
-            else rewards['correct_opponent_call'] )
+            (rewards['correct_call'] if is_self
+             else rewards['correct_team_call'] if same_team
+             else rewards['correct_opponent_call'])
             if status else 
-            (rewards['incorrect_call'] if same_team 
-            else rewards['incorrect_opponent_call'])
+            (rewards['incorrect_call'] if is_self
+             else rewards['incorrect_team_call'] if same_team 
+             else rewards['incorrect_opponent_call'])
         )
         state_array = np.array([1]) # call indicator
 
@@ -134,13 +142,17 @@ class FishGame:
 
     def construct_ask_vector(self, ask):
         asking_p, asked_p, card, status = ask.values()
+
+        is_self = self.initials_to_index(asking_p) == 0
         same_team = not self.initials_to_index(asking_p) % 2
         self.rewards.append(
-            (rewards['correct_ask'] if same_team
-            else rewards['correct_opponent_ask'])
+            (rewards['correct_ask'] if is_self 
+             else rewards['correct_team_ask'] if same_team
+             else rewards['correct_opponent_ask'])
             if status else 
-            (rewards['incorrect_ask'] if same_team
-            else rewards['incorrect_opponent_ask'])
+            (rewards['incorrect_ask'] if is_self 
+             else rewards['incorrect_team_ask'] if same_team
+             else rewards['incorrect_opponent_ask'])
         )
         return np.concatenate((np.array([0]), 
                                self.encode_player(asking_p),
