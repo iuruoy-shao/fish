@@ -73,6 +73,8 @@ class QLearningAgent:
         self.batch_size = 32
 
     def tensor(self, x, as_bool=False):
+        if isinstance(x, np.int64):
+            return torch.tensor(x).to(self.device)
         if as_bool:
             return torch.BoolTensor(x).to(self.device)
         return torch.FloatTensor(x).to(self.device)
@@ -91,7 +93,7 @@ class QLearningAgent:
         next_qs = []
 
         for i in range(len(reward)):
-            this_reward = reward[i][0]
+            this_reward = self.tensor(reward[i][0])
             this_next_q = self.max_q(next_action, i)
             for act in player_action.keys():
                 if player_action[act][i] is None:
