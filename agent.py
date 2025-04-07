@@ -104,11 +104,10 @@ class QLearningAgent:
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
                 if act == 'call_cards':
-                    for row in range(6):
-                        agent_actions.append(this_action[row])
-                        player_actions.append(this_player_action[row])
-                        rewards.append(this_reward)
-                        next_qs.append(this_next_q)
+                    agent_actions.extend(this_action)
+                    player_actions.extend(this_player_action)
+                    rewards += [this_reward] * 6
+                    next_qs += [this_next_q] * 6
                 else:
                     agent_actions.append(this_action)
                     player_actions.append(this_player_action)
