@@ -13,10 +13,8 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
+        self.fc3 = nn.Linear(256, 64)
         self.dropout = nn.Dropout(0.1)
-        
-        self.call_head = nn.Linear(256, 64)
-        self.ask_head = nn.Linear(256, 64)
 
         self.to_call = nn.Linear(64, 2) 
         self.pick_call_set = nn.Linear(64, 9)
@@ -30,17 +28,15 @@ class QNetwork(nn.Module):
         x = torch.flatten(x, 1)
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))
-        
-        call_head = self.dropout(F.relu(self.call_head(x)))
-        ask_head = self.dropout(F.relu(self.ask_head(x)))
+        x = self.dropout(F.relu(self.fc3(x)))
 
-        to_call = self.to_call(call_head)
-        call_set = self.pick_call_set(call_head)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), 1)), (-1, 6, 4))
+        to_call = self.to_call(x)
+        call_set = self.pick_call_set(x)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1, 6, 4))
         
-        ask_person = self.pick_person(ask_head)
-        ask_set = self.pick_ask_set(torch.cat((ask_head, ask_person), 1))
-        ask_card = self.pick_ask_card(torch.cat((ask_head, ask_person, ask_set), 1))
+        ask_person = self.pick_person(x)
+        ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
+        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
             'call': to_call,
@@ -151,6 +147,7 @@ class QLearningAgent:
             total_loss = 0
             batch_count = 0
 
+            self.q_network.train()
             for i in range(0, len(self.memory), self.batch_size):
                 if i + self.batch_size > len(self.memory):
                     continue
@@ -236,6 +233,7 @@ class QLearningAgent:
         return memories
 
     def act(self, state, mask):
+        self.q_network.eval()
         with torch.no_grad():
             q_vals = self.q_network(state, mask)
         result = {}
