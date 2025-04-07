@@ -107,9 +107,7 @@ class QLearningAgent:
                     current_q.append(this_action[torch.argmax(this_player_action)])
                     rewards.append(this_reward)
                     next_qs.append(this_next_q)
-        target_q = self.target_q(self.tensor(next_qs), self.tensor(rewards))
-        
-        return self.loss(torch.stack(current_q), target_q)
+        return self.loss(torch.stack(current_q), self.target_q(self.tensor(next_qs), self.tensor(rewards)))
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
