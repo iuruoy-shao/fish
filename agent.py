@@ -73,8 +73,6 @@ class QLearningAgent:
         self.batch_size = 32
 
     def tensor(self, x, as_bool=False):
-        if isinstance(x, np.int64):
-            return torch.tensor(x).to(self.device)
         if as_bool:
             return torch.BoolTensor(x).to(self.device)
         return torch.FloatTensor(x).to(self.device)
@@ -83,17 +81,13 @@ class QLearningAgent:
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
         return torch.max(action['ask_card'][i])
-    
-    def target_q(self, max_q_next, reward): 
-        return reward + self.gamma * max_q_next
 
     def q_loss(self, action, next_action, player_action, reward):
         current_q = []
-        rewards = []
-        next_qs = []
+        target_q = []
 
         for i in range(len(reward)):
-            this_reward = self.tensor(reward[i][0])
+            this_reward = reward[i][0]
             this_next_q = self.max_q(next_action, i)
             for act in player_action.keys():
                 if player_action[act][i] is None:
@@ -103,13 +97,11 @@ class QLearningAgent:
                 if act == 'call_cards':
                     for row in range(6):
                         current_q.append(this_action[row][torch.argmax(this_player_action[row])])
-                        rewards.append(this_reward)
-                        next_qs.append(this_next_q)
+                        target_q.append(this_reward + self.gamma * this_next_q)
                 else:
                     current_q.append(this_action[torch.argmax(this_player_action)])
-                    rewards.append(this_reward)
-                    next_qs.append(this_next_q)
-        return self.loss(torch.stack(current_q), self.target_q(self.tensor(next_qs), self.tensor(rewards)))
+                    target_q.append(this_reward + self.gamma * this_next_q)
+        return self.loss(torch.stack(current_q), torch.stack(target_q))
     
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
