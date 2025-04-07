@@ -75,6 +75,8 @@ class FishGame:
     
     def try_ask(self, ask, prev_hands, i):
         new_hands = copy.deepcopy(prev_hands)
+        if self.initials_to_index(ask['asking_p']) % 2 == self.initials_to_index(ask['asked_p']) % 2:
+            raise ParseError(f"Invalid ask on line {i+2}, same team")
         try:
             new_hands[ask['asked_p']].remove(ask['card'])
             new_hands[ask['asking_p']].add(ask['card'])
