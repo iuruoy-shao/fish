@@ -101,22 +101,12 @@ class QLearningAgent:
                     continue # skip Nones
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
-                current_q = self.current_q(this_action, this_player_action)
-                target_q = self.target_q(this_next_q, this_reward)
-                if target_q < -9e8:
-                    for act in next_action.keys():
-                        print(f"{act} {next_action[act][i]}")
                 if act == 'call_cards':
-                    if any(current_q < -9e8):
-                        print(f"{act} {this_action} {this_player_action}")
                     agent_actions.extend(this_action)
                     player_actions.extend(this_player_action)
                     rewards += [this_reward] * 6
                     next_qs += [this_next_q] * 6
                 else:
-                    if current_q < -9e8:
-                        for act in action.keys():
-                            print(f"{act} {action[act][i]} {player_action[act][i]}")
                     agent_actions.append(this_action)
                     player_actions.append(this_player_action)
                     rewards.append(this_reward)
@@ -250,7 +240,7 @@ class QLearningAgent:
                     game.parse_action(action, player)
                     acted = True
             if not acted and not game.ended():
-                if game.turn in game.players_with_cards():
+                if game.turn in game.players_with_cards() and not game.asking_ended():
                     game.parse_action(actions[game.turn], game.turn)
                 elif no_call_count < 3:
                     no_call_count += 1

@@ -255,6 +255,9 @@ class SimulatedFishGame(FishGame):
 
     def ended(self):
         return not any(self.hands[-1].values())
+    
+    def asking_ended(self):
+        return not any(self.hands[-1][player] for player in self.players[1::2]) or not any(self.hands[-1][player] for player in self.players[::2])
 
     def assign_hands(self):
         cards = list(card_to_vector.keys())[:-6 if self.n_players == 8 else None] # remove extra set 
