@@ -39,7 +39,7 @@ class QNetwork(nn.Module):
         ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
-            'call': to_call.masked_fill(~action_masks['call'], -1e9),
+            'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
             'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
@@ -75,6 +75,8 @@ class QLearningAgent:
         return torch.FloatTensor(x).to(self.device)
 
     def max_q(self, action, i):
+        if all(action['ask_set'][i] < -9e8):
+            return torch.tensor(0).to(self.device)
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
         return torch.max(action['ask_card'][i])
@@ -100,6 +102,10 @@ class QLearningAgent:
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
                 current_q = self.current_q(this_action, this_player_action)
+                target_q = self.target_q(this_next_q, this_reward)
+                if target_q < -9e8:
+                    for act in next_action.keys():
+                        print(f"{act} {next_action[act][i]}")
                 if act == 'call_cards':
                     if any(current_q < -9e8):
                         print(f"{act} {this_action} {this_player_action}")
@@ -109,7 +115,8 @@ class QLearningAgent:
                     next_qs += [this_next_q] * 6
                 else:
                     if current_q < -9e8:
-                        print(f"{act} {this_action} {this_player_action}")
+                        for act in action.keys():
+                            print(f"{act} {action[act][i]} {player_action[act][i]}")
                     agent_actions.append(this_action)
                     player_actions.append(this_player_action)
                     rewards.append(this_reward)
@@ -120,8 +127,6 @@ class QLearningAgent:
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
-            'call': self.tensor([[1,1] if any(np.array(cards_remaining)[i, (index + 1) % 2::2] > 0) else [1,0]
-                                 for i, index in enumerate(agent_index)], as_bool=True),
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor([np.tile(np.array(cards_remaining)[i, index % 2::2] > 0, (6, 1)) 
                                        for i, index in enumerate(agent_index)], as_bool=True),  # the players on the team that still have cards
@@ -139,11 +144,26 @@ class QLearningAgent:
             )
             for key in batch[0].keys()
         }
+
+    def shuffle_memory(self):
+        indices = list(range(len(self.memory['state'])))
+        random.shuffle(indices)
+        
+        def shuffle_item(item, idx_list):
+            if isinstance(item, dict):
+                return {k: shuffle_item(v, idx_list) for k, v in item.items()}
+            elif isinstance(item, list):
+                return [item[i] for i in idx_list]
+            elif isinstance(item, torch.Tensor):
+                return torch.stack([item[i] for i in idx_list])
+        self.memory = {key: shuffle_item(value, indices) for key, value in self.memory.items()}
     
     def pick_batch(self, memory, indices):
         start, end = indices
         return {
-            key: memory[key][start:end]
+            key: self.pick_batch(memory[key], (start, end))
+            if isinstance(memory[key], dict)
+            else memory[key][start:end]
             for key in memory.keys()
         }
     
@@ -157,15 +177,15 @@ class QLearningAgent:
         self.memory = self.unpack_memory(train_memory)
         self.memory['action_masks'] = self.action_masks(*self.memory['mask_dep'].values())
         self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
-        
+
         for epoch in range(n_epochs):
-            random.shuffle(self.memory)
+            self.shuffle_memory()
             total_loss = 0
             batch_count = 0
 
             self.q_network.train()
-            for i in range(0, len(self.memory), self.batch_size):
-                if i + self.batch_size > len(self.memory):
+            for i in range(0, len(self.memory['state']), self.batch_size):
+                if i + self.batch_size > len(self.memory['state']):
                     continue
 
                 batch = self.pick_batch(self.memory, (i,i+self.batch_size))
