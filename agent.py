@@ -39,7 +39,7 @@ class QNetwork(nn.Module):
         ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
 
         return {  # masking & normalizing
-            'call': to_call,
+            'call': to_call.masked_fill(~action_masks['call'], -1e9),
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
             'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
@@ -99,12 +99,17 @@ class QLearningAgent:
                     continue # skip Nones
                 this_action = action[act][i]
                 this_player_action = self.tensor(player_action[act][i])
+                current_q = self.current_q(this_action, this_player_action)
                 if act == 'call_cards':
+                    if any(current_q < -9e8):
+                        print(f"{act} {this_action} {this_player_action}")
                     agent_actions.extend(this_action)
                     player_actions.extend(this_player_action)
                     rewards += [this_reward] * 6
                     next_qs += [this_next_q] * 6
                 else:
+                    if current_q < -9e8:
+                        print(f"{act} {this_action} {this_player_action}")
                     agent_actions.append(this_action)
                     player_actions.append(this_player_action)
                     rewards.append(this_reward)
@@ -115,6 +120,8 @@ class QLearningAgent:
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
+            'call': self.tensor([[1,1] if any(np.array(cards_remaining)[i, (index + 1) % 2::2] > 0) else [1,0]
+                                 for i, index in enumerate(agent_index)], as_bool=True),
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor([np.tile(np.array(cards_remaining)[i, index % 2::2] > 0, (6, 1)) 
                                        for i, index in enumerate(agent_index)], as_bool=True),  # the players on the team that still have cards
@@ -123,24 +130,33 @@ class QLearningAgent:
             'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
         }
     
-    def unpack_batch(self, batch):
+    def unpack_memory(self, batch):
         return {
             key: (
-                self.unpack_batch([item[key] for item in batch])
+                self.unpack_memory([item[key] for item in batch])
                 if isinstance(batch[0][key], dict)
                 else [item[key] for item in batch]
             )
             for key in batch[0].keys()
         }
     
+    def pick_batch(self, memory, indices):
+        start, end = indices
+        return {
+            key: memory[key][start:end]
+            for key in memory.keys()
+        }
+    
     def handle_batch(self, batch):
-        current_q = self.q_network(self.tensor(batch['state']), self.action_masks(*batch['mask_dep'].values()))
-        next_q = self.q_network(self.tensor(batch['next_state']), self.action_masks(*batch['mask_dep'].values()))
+        current_q = self.q_network(self.tensor(batch['state']), batch['action_masks'])
+        next_q = self.q_network(self.tensor(batch['next_state']), batch['next_action_masks'])
                 
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def train_on_data(self, train_memory, test_memory, n_epochs, lr_schedule=True):
-        self.memory = train_memory
+        self.memory = self.unpack_memory(train_memory)
+        self.memory['action_masks'] = self.action_masks(*self.memory['mask_dep'].values())
+        self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
         
         for epoch in range(n_epochs):
             random.shuffle(self.memory)
@@ -152,7 +168,7 @@ class QLearningAgent:
                 if i + self.batch_size > len(self.memory):
                     continue
 
-                batch = self.unpack_batch(self.memory[i:i+self.batch_size])
+                batch = self.pick_batch(self.memory, (i,i+self.batch_size))
                 loss = self.handle_batch(batch)
                 total_loss += loss
                 batch_count += 1
@@ -166,7 +182,7 @@ class QLearningAgent:
             
             if test_memory:
                 with torch.no_grad():
-                    batch = self.unpack_batch(test_memory)
+                    batch = self.unpack_memory(test_memory)
                     test_loss = self.handle_batch(batch)
             
             if lr_schedule:
@@ -178,24 +194,25 @@ class QLearningAgent:
         with open(path, 'wb') as f:
             pickle.dump(memory, f)
 
-    def train_self_play(self, n_games, update_rate=5, path='models/model.pth'):
+    def train_self_play(self, n_games, update_rate=5, epochs=10, path='models/model.pth'):
         try:
             with open('memory.pkl', 'rb') as f:
                 memories = pickle.load(f)
         except (FileNotFoundError, EOFError):
-            memories = []
+            memories = self.real_data
         memories_batch = []
         for i in range(n_games):
-            print(f"Game {i} finished, {len(memories_batch)} memories collected")
-            if i % update_rate == 0 and len(memories_batch):
-                self.train_on_data(memories_batch, None, 10, lr_schedule=False)
+            game, memory = self.simulate_game()
+            memories_batch += memory
+            memories += memory if len(game.datarows) > 50 else []
+            print(f"Game {i} finished, {len(memories)} memories collected")
+            if i % update_rate == 0 and i:
+                self.train_on_data(memories_batch, None, epochs, lr_schedule=False)
                 memories_batch = []
-                memories += memories_batch
-            if i % (update_rate * 3) == 0 and len(memories):
-                self.train_on_data(self.real_data, None, 10, lr_schedule=False)
+            if i % (update_rate * 3) == 0 and i and len(memories):
+                self.train_on_data(self.real_data, None, epochs, lr_schedule=False)
                 self.pickle_memory(memories)
                 self.save_model(path)
-            memories_batch += self.simulate_game()
 
     def simulate_game(self):
         game = SimulatedFishGame(random.choice([6,8]))
@@ -206,7 +223,7 @@ class QLearningAgent:
             for player in game.players_with_cards():
                 game.rotate(player)
                 state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
-                mask = self.action_masks(*self.unpack_batch([game.mask_dep(len(game.hands)-1, player)]).values())
+                mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 action = self.act(state, mask)
                 actions[player] = action
                 if action['call'][0] > action['call'][1] and not acted:
@@ -232,7 +249,7 @@ class QLearningAgent:
         memories = []
         for player in game.players:
             memories += game.memory(player)
-        return memories
+        return game, memories
 
     def act(self, state, mask):
         self.q_network.eval()
