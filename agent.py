@@ -13,26 +13,34 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(200 * 54, 1024)
         self.fc2 = nn.Linear(1024, 256)
-        self.fc3 = nn.Linear(256, 64)
-        self.dropout = nn.Dropout(0.1)
+        self.fc3 = nn.Linear(256, 128)
+        
+        self.fc4 = nn.Linear(128, 64)
+        self.fc5 = nn.Linear(64, 32)
+        self.fc6 = nn.Linear(32, 16)
 
-        self.to_call = nn.Linear(64, 2) 
-        self.pick_call_set = nn.Linear(64, 9)
-        self.pick_call_cards = nn.Linear(64 + 9, 24) # will pick top value for a single section of len 4
+        self.to_call = nn.Linear(128, 2) 
+        self.pick_call_set = nn.Linear(16, 9)
+        self.pick_call_cards = nn.Linear(16 + 9, 24) # will pick top value for a single section of len 4
 
-        self.pick_person = nn.Linear(64, 4)
-        self.pick_ask_set = nn.Linear(64 + 4, 9)
-        self.pick_ask_card = nn.Linear(64 + 4 + 9, 6)
+        self.pick_person = nn.Linear(128, 4)
+        self.pick_ask_set = nn.Linear(128 + 4, 9)
+        self.pick_ask_card = nn.Linear(128 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
         x = torch.flatten(x, 1)
-        x = self.dropout(F.relu(self.fc1(x)))
-        x = self.dropout(F.relu(self.fc2(x)))
-        x = self.dropout(F.relu(self.fc3(x)))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
 
         to_call = self.to_call(x)
-        call_set = self.pick_call_set(x)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), 1)), (-1, 6, 4))
+        
+        call_head = F.relu(self.fc4(x))
+        call_head = F.relu(self.fc5(call_head))
+        call_head = F.relu(self.fc6(call_head))
+
+        call_set = self.pick_call_set(call_head)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), 1)), (-1, 6, 4))
         
         ask_person = self.pick_person(x)
         ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
@@ -47,7 +55,6 @@ class QNetwork(nn.Module):
             'ask_card': ask_card, 
         }
 
-# Q-Learning Agent
 class QLearningAgent:
     def __init__(self, real_data=None):
         if real_data is None:
@@ -66,7 +73,7 @@ class QLearningAgent:
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
-        self.epsilon = 0.1   # exploration rate
+        self.epsilon = 0.25   # exploration rate
         self.batch_size = 32
 
     def tensor(self, x, as_bool=False):
@@ -220,7 +227,7 @@ class QLearningAgent:
                 self.train_on_data(memories_batch, None, epochs, lr_schedule=False)
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i and len(memories):
-                self.train_on_data(self.real_data, None, epochs, lr_schedule=False)
+                self.train_on_data(memories, None, epochs, lr_schedule=False)
                 self.pickle_memory(memories)
                 self.save_model(path)
 
