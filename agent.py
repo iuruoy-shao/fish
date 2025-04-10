@@ -11,28 +11,24 @@ import pickle
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(200 * 54, 1024)
-        self.fc2 = nn.Linear(1024, 256)
-        self.fc3 = nn.Linear(256, 128)
+        self.rnn = nn.GRU(97, 128, 2, batch_first=True)
+        self.to_call = nn.Linear(128, 2)
         
         self.fc4 = nn.Linear(128, 64)
         self.fc5 = nn.Linear(64, 32)
         self.fc6 = nn.Linear(32, 16)
-
-        self.to_call = nn.Linear(128, 2) 
+        
         self.pick_call_set = nn.Linear(16, 9)
-        self.pick_call_cards = nn.Linear(16 + 9, 24) # will pick top value for a single section of len 4
-
+        self.pick_call_cards = nn.Linear(16 + 9, 24)
+        
         self.pick_person = nn.Linear(128, 4)
         self.pick_ask_set = nn.Linear(128 + 4, 9)
         self.pick_ask_card = nn.Linear(128 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-
+        x, _ = self.rnn(x)
+        x = x.reshape(-1, 128)
+        
         to_call = self.to_call(x)
         
         call_head = F.relu(self.fc4(x))
@@ -40,11 +36,11 @@ class QNetwork(nn.Module):
         call_head = F.relu(self.fc6(call_head))
 
         call_set = self.pick_call_set(call_head)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), 1)), (-1, 6, 4))
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), dim=1)), (-1, 6, 4))
         
         ask_person = self.pick_person(x)
-        ask_set = self.pick_ask_set(torch.cat((x, ask_person), 1))
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), 1))
+        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
+        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
 
         return {  # masking & normalizing
             'call': to_call,
@@ -165,27 +161,32 @@ class QLearningAgent:
         }
     
     def handle_batch(self, batch):
-        current_q = self.q_network(self.tensor(batch['state']), batch['action_masks'])
-        next_q = self.q_network(self.tensor(batch['next_state']), batch['next_action_masks'])
-                
-        return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
+        batch_loss = 0
+        for episode in batch:
+            current_q = self.q_network(self.tensor(episode['state']), episode['action_masks'])
+            next_q = self.q_network(self.tensor(episode['next_state']), episode['next_action_masks'])
+            batch_loss += self.q_loss(current_q, next_q, episode['action'], episode['reward'])
+        return batch_loss
     
-    def train_on_data(self, train_memory, test_memory, n_epochs, lr_schedule=True):
-        self.memory = self.unpack_memory(train_memory)
-        self.memory['action_masks'] = self.action_masks(*self.memory['mask_dep'].values())
-        self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
+    def train_on_data(self, memory, n_epochs, lr_schedule=True):
+        self.memory = []
+        for episode in memory:
+            unpacked = self.unpack_memory(episode)
+            unpacked['action_masks']  = self.action_masks(*unpacked['mask_dep'].values())
+            unpacked['next_action_masks'] = self.action_masks(*unpacked['next_mask_dep'].values())
+            self.memory.append(unpacked)
 
         for epoch in range(n_epochs):
-            self.shuffle_memory()
+            random.shuffle(self.memory)
             total_loss = 0
             batch_count = 0
 
             self.q_network.train()
-            for i in range(0, len(self.memory['state']), self.batch_size):
-                if i + self.batch_size > len(self.memory['state']):
+            for i in range(0, len(self.memory), self.batch_size):
+                if i + self.batch_size > len(self.memory):
                     continue
 
-                batch = self.pick_batch(self.memory, (i,i+self.batch_size))
+                batch = self.memory[i:i+self.batch_size]
                 loss = self.handle_batch(batch)
                 total_loss += loss
                 batch_count += 1
@@ -197,15 +198,10 @@ class QLearningAgent:
             
             train_avg_loss = total_loss / batch_count
             
-            if test_memory:
-                with torch.no_grad():
-                    batch = self.unpack_memory(test_memory)
-                    test_loss = self.handle_batch(batch)
-            
             if lr_schedule:
                 self.scheduler.step(train_avg_loss)
             
-            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, test loss {round(test_loss.item(), 5) if test_memory else None}, lr {self.optimizer.param_groups[0]['lr']}")
+            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, lr {self.optimizer.param_groups[0]['lr']}")
     
     def pickle_memory(self, memory, path='memory.pkl'):
         with open(path, 'wb') as f:
@@ -224,10 +220,10 @@ class QLearningAgent:
             memories += memory if len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories collected")
             if i % update_rate == 0 and i:
-                self.train_on_data(memories_batch, None, epochs, lr_schedule=False)
+                self.train_on_data(memories_batch, epochs, lr_schedule=False)
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i and len(memories):
-                self.train_on_data(memories, None, epochs, lr_schedule=False)
+                self.train_on_data(memories, epochs, lr_schedule=False)
                 self.pickle_memory(memories)
                 self.save_model(path)
 

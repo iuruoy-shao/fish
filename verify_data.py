@@ -137,7 +137,7 @@ class FishGame:
             c = c > 0
             v_call = np.concatenate((v_call, c))
         # encoding status
-        state_array = np.concatenate((state_array, np.pad(v_call,(0,24-len(v_call))).reshape(4,6).T.flatten(), np.array([status]), np.zeros(11)))
+        state_array = np.concatenate((state_array, np.pad(v_call,(0,24-len(v_call))).reshape(4,6).T.flatten(), np.array([status])))
         return state_array
 
     def construct_ask_vector(self, ask):
@@ -159,13 +159,17 @@ class FishGame:
                                self.encode_player(asked_p),
                                card_to_vector[card],
                                np.array([status]),
-                               np.zeros(21)))
+                               np.zeros(10)))
         
     def to_state(self):
-        state = np.zeros((len(self.datarows[1:-1]),54), dtype=int)
-        for i, line in enumerate(self.datarows[1:-1]):
-            state[i] = self.construct_call_vector(self.parse_call(line)) if ":" in line else self.construct_ask_vector(self.parse_ask(line))
-        return state
+        return [
+            (
+                self.construct_call_vector(self.parse_call(line))
+                if ":" in line
+                else self.construct_ask_vector(self.parse_ask(line))
+            )
+            for line in self.datarows[1:-1]
+        ]
 
     def encode_hand(self, hand, flatten=True):
         hand_vector = np.zeros((9,6), dtype=int)
@@ -173,11 +177,10 @@ class FishGame:
             hand_vector[np.where(sets_array == card)[0][0]][np.where(sets_array == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
-    def get_state(self, i, player, ordered_state, pad=True):
+    def get_state(self, i, player, ordered_state):
         i = i if i < len(self.hands) else -1
         return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
-                               ordered_state[:i][::-1],
-                               np.zeros((200-i-1,54))))
+                               ordered_state[i-1] if i else np.zeros(43)), axis=None)
 
     def rotate(self, player):
         self.rewards = []
@@ -196,7 +199,7 @@ class FishGame:
         is_ask = lambda i: not state[i][0] and is_player(i)
         is_call = lambda i: state[i][0] and is_player(i)
         return [{
-            'state': self.get_state(i, player, state), # invert sequential order, pad up to 200,
+            'state': self.get_state(i, player, state),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
