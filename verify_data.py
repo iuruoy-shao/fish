@@ -6,17 +6,17 @@ import random
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 
 rewards = {
-    'correct_call': 5,
-    'incorrect_call': -5,
+    'correct_call': 1,
+    'incorrect_call': -1, # very bad
     'correct_team_call': 1,
     'incorrect_team_call': -1,
     'correct_opponent_call': -1,
     'incorrect_opponent_call': 0,
     'correct_ask': .5,
     'incorrect_ask': -.5,
-    'correct_team_ask': .1,
-    'incorrect_team_ask': -.1,
-    'correct_opponent_ask': -.1,
+    'correct_team_ask': 0,
+    'incorrect_team_ask': 0,
+    'correct_opponent_ask': 0,
     'incorrect_opponent_ask': 0,
 }
 
@@ -58,17 +58,20 @@ class FishGame:
             vector[np.where(sets_array == card)[0][0]] = 1
             vector[np.where(sets_array == card)[1][0] + 9] = 1
             card_to_vector[str(card)] = vector
-        team1 = self.players[::2]
-        team2 = self.players[1::2]
+        team0 = self.players[::2]
+        team1 = self.players[1::2]
+        random.shuffle(team0)
         random.shuffle(team1)
-        random.shuffle(team2)
-        self.players = [team2[i//2] if i % 2 else team1[i//2] for i in range(len(self.players))]
+        self.players = [team1[i//2] if i % 2 else team0[i//2] for i in range(len(self.players))]
 
     def initials_to_index(self, initials):
         return self.players.index(initials)
 
     def teammates(self, initials):
         return self.players[self.initials_to_index(initials) % 2::2]
+    
+    def set_index(self, card):
+       return np.where(sets_array == card)[0][0]
 
     def parse_call(self, line):
         return {
@@ -269,6 +272,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
+        self.help_threshold = .3
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
@@ -302,29 +306,45 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        is_call = action['call'][0] > action['call'][1]
-        if is_call:
-            move = self.handle_call(action, new_hands, player)
+        monopoly = self.monopolized_set(new_hands)
+        if monopoly:
+            move = self.handle_call(None, new_hands, player, force_call=monopoly)
         else:
-            move = self.handle_ask(action, new_hands, player)
+            is_call = action['call'][0] > action['call'][1]
+            if is_call:
+                move = self.handle_call(action, new_hands, player)
+            else:
+                move = self.handle_ask(action, new_hands, player)
 
         self.hands.append(new_hands)
         self.datarows.insert(-1, move)
 
         if not new_hands[self.turn]: # if the player whose turn it is runs out of cards, pass to teammate with cards
             self.random_pass()
+            
+    def monopolized_set(self, hands):
+        team0_hands = set().union(*list(hands.values())[::2])
+        for i, card_set in enumerate(sets):
+            card_set = set(card_set)
+            if card_set.issubset(team0_hands):
+                return i, {ref_player:card_set.intersection(hands[ref_player]) for ref_player in self.players[::2]}
+        return False
 
-    def handle_call(self, action, new_hands, player):
-        call_set = np.argmax(action['call_set'])
-        call_cards = np.argmax(action['call_cards'], axis=1)
-
-        card_assignments = {ref_player:set() for ref_player in self.players[::2]}
+    def handle_call(self, action, new_hands, player, force_call=None):
         success = True
-        for card_index, player_index in enumerate(call_cards):
-            ref_player = self.players[::2][player_index]
-            card = sets[call_set][card_index]
-            success = success and (card in new_hands[ref_player])
-            card_assignments[ref_player].add(card)
+        if force_call:
+            call_set, card_assignments = force_call
+            print(f"helping call... {card_assignments}")
+        else:
+            call_set = np.argmax(action['call_set'])
+            call_cards = np.argmax(action['call_cards'], axis=1)
+
+            card_assignments = {ref_player:set() for ref_player in self.players[::2]}
+            for card_index, player_index in enumerate(call_cards):
+                ref_player = self.players[::2][player_index]
+                card = sets[call_set][card_index]
+                success = success and (card in new_hands[ref_player])
+                card_assignments[ref_player].add(card)
 
         for hand in new_hands.values():
             hand -= set(sets[call_set])
@@ -334,9 +354,27 @@ class SimulatedFishGame(FishGame):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
         card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
+        if not success and random.random() < self.help_threshold:
+            helped_card = self.pick_successful_card(player, ask_person, new_hands, card)
+            if helped_card:
+                card = helped_card
+                success = True
+            print(f"helping ask... {card}")
         if success:
             new_hands[ask_person].remove(card)
             new_hands[player].add(card)
         else:
             self.turn = ask_person
         return f"{player} {ask_person} {card} {int(success)}\n"
+    
+    def pick_successful_card(self, asking_player, ask_person, new_hands, card):
+        og_set_index = self.set_index(card)
+        their_hand = list(new_hands[ask_person])
+        their_hand_index = [self.set_index(card) for card in their_hand]
+        my_hand_index = [self.set_index(card) for card in new_hands[asking_player]]
+        if og_set_index in their_hand_index:
+            return their_hand[their_hand_index.index(og_set_index)]
+        shared_cards = set(their_hand_index).intersection(set(my_hand_index))
+        if shared_cards:
+            return their_hand[their_hand_index.index(list(shared_cards)[0])]
+        return False

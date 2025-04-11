@@ -83,8 +83,8 @@ class QLearningAgent:
 
     def tensor(self, x, as_bool=False):
         if as_bool:
-            return torch.BoolTensor(x).to(self.device)
-        return torch.FloatTensor(x).to(self.device)
+            return torch.BoolTensor(np.array(x)).to(self.device)
+        return torch.FloatTensor(np.array(x)).to(self.device)
 
     def max_q(self, action, i):
         if all(action['ask_set'][i] < -9e8):
@@ -273,7 +273,7 @@ class QLearningAgent:
         for player in game.players:
             for _ in range(10):
                 game.shuffle()
-                memories.extend(game.memory(player))
+                memories.append(game.memory(player))
         return game, memories
 
     def act(self, state, mask):
