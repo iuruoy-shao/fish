@@ -8,41 +8,50 @@ import random
 import os
 import pickle
 
+class HandPrediction(nn.Module):
+    def __init__(self):
+        super(QNetwork, self).__init__()
+        self.rnn = nn.LSTM(97, 512, 3, batch_first=True)
+        self.fc = nn.Linear(512, 486)
+        
+    def forward(self, x, mask):
+        out, _ = self.rnn(x)
+        return F.softmax(self.fc(out)
+                         .reshape(-1, 8, 54)
+                         .masked_fill(~mask, -1e9), dim=1)
+
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.rnn = nn.GRU(97, 128, 2, batch_first=True)
-        self.to_call = nn.Linear(128, 2)
+        self.rnn = nn.LSTM(97, 256, 3, batch_first=True)
         
-        self.fc4 = nn.Linear(128, 64)
-        self.fc5 = nn.Linear(64, 32)
-        self.fc6 = nn.Linear(32, 16)
+        self.fc4 = nn.Linear(256, 128)
+        self.fc5 = nn.Linear(128, 64)
+        self.fc6 = nn.Linear(64, 32)
         
-        self.pick_call_set = nn.Linear(16, 9)
-        self.pick_call_cards = nn.Linear(16 + 9, 24)
+        self.to_call = nn.Linear(32, 2)
+        self.pick_call_set = nn.Linear(32, 9)
+        self.pick_call_cards = nn.Linear(32 + 9, 24)
         
-        self.pick_person = nn.Linear(128, 4)
-        self.pick_ask_set = nn.Linear(128 + 4, 9)
-        self.pick_ask_card = nn.Linear(128 + 4 + 9, 6)
+        self.pick_person = nn.Linear(32, 4)
+        self.pick_ask_set = nn.Linear(32 + 4, 9)
+        self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
-        x, _ = self.rnn(x)
-        x = x.reshape(-1, 128)
-        
-        to_call = self.to_call(x)
-        
-        call_head = F.relu(self.fc4(x))
-        call_head = F.relu(self.fc5(call_head))
-        call_head = F.relu(self.fc6(call_head))
+        out, _ = self.rnn(x)
+        h = F.relu(self.fc4(out))
+        h = F.relu(self.fc5(h))
+        h = F.relu(self.fc6(h))
 
-        call_set = self.pick_call_set(call_head)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((call_head, call_set), dim=1)), (-1, 6, 4))
-        
-        ask_person = self.pick_person(x)
-        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
+        to_call = self.to_call(h)
+        call_set = self.pick_call_set(h)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((h, call_set), dim=1)), (-1, 6, 4))
 
-        return {  # masking & normalizing
+        ask_person = self.pick_person(h)
+        ask_set = self.pick_ask_set(torch.cat((h, ask_person), dim=1))
+        ask_card = self.pick_ask_card(torch.cat((h, ask_person, ask_set), dim=1))
+
+        return {
             'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
@@ -69,8 +78,8 @@ class QLearningAgent:
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
-        self.epsilon = 0.25   # exploration rate
-        self.batch_size = 32
+        self.epsilon = 0.10   # exploration rate
+        self.batch_size = 4
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -222,9 +231,10 @@ class QLearningAgent:
             if i % update_rate == 0 and i:
                 self.train_on_data(memories_batch, epochs, lr_schedule=False)
                 memories_batch = []
-            if i % (update_rate * 3) == 0 and i and len(memories):
-                self.train_on_data(memories, epochs, lr_schedule=False)
-                self.pickle_memory(memories)
+            if i % (update_rate * 3) == 0 and i:
+                if len(memories):
+                    self.train_on_data(memories, epochs, lr_schedule=False)
+                    self.pickle_memory(memories)
                 self.save_model(path)
 
     def simulate_game(self):
@@ -261,7 +271,9 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         for player in game.players:
-            memories += game.memory(player)
+            for _ in range(10):
+                game.shuffle()
+                memories.extend(game.memory(player))
         return game, memories
 
     def act(self, state, mask):

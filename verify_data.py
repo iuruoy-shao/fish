@@ -21,6 +21,9 @@ rewards = {
 }
 
 with open('sets.json','r') as f:
+    global sets_array
+    global sets
+    global card_to_vector
     sets = json.load(f)
     sets_array = np.array(sets)
     card_to_vector = {}
@@ -41,6 +44,25 @@ class FishGame:
         self.score = [0, 0]
         self.rewards = [] # encodes for even team, reverse for odd team
         self.verify()
+
+    def shuffle(self):
+        global sets_array
+        global card_to_vector
+        global sets
+        np.random.shuffle(sets_array) # shuffle rows
+        np.apply_along_axis(np.random.shuffle, 1, sets_array) # shuffle within row
+        sets = sets_array.tolist()
+        card_to_vector = {}
+        for card in sets_array.flatten():
+            vector = np.zeros(15, int)
+            vector[np.where(sets_array == card)[0][0]] = 1
+            vector[np.where(sets_array == card)[1][0] + 9] = 1
+            card_to_vector[str(card)] = vector
+        team1 = self.players[::2]
+        team2 = self.players[1::2]
+        random.shuffle(team1)
+        random.shuffle(team2)
+        self.players = [team2[i//2] if i % 2 else team1[i//2] for i in range(len(self.players))]
 
     def initials_to_index(self, initials):
         return self.players.index(initials)
