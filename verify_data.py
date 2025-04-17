@@ -4,6 +4,8 @@ import numpy as np
 import random
 
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
+CALL_LEN = 42
+ASK_LEN = 32
 
 rewards = {
     'correct_call': 1,
@@ -143,10 +145,9 @@ class FishGame:
              else rewards['incorrect_team_call'] if same_team 
              else rewards['incorrect_opponent_call'])
         )
-        state_array = np.array([1]) # call indicator
 
         # encoding caller
-        state_array = np.concatenate((state_array, self.encode_player(calling_p)))
+        state_array = self.encode_player(calling_p)
 
         # encoding calls
         called_set = False
@@ -179,20 +180,18 @@ class FishGame:
              else rewards['incorrect_team_ask'] if same_team
              else rewards['incorrect_opponent_ask'])
         )
-        return np.concatenate((np.array([0]), 
-                               self.encode_player(asking_p),
+        return np.concatenate((self.encode_player(asking_p),
                                self.encode_player(asked_p),
                                card_to_vector[card],
-                               np.array([status]),
-                               np.zeros(10)))
+                               np.array([status])))
         
     def to_state(self):
         return [
-            (
-                self.construct_call_vector(self.parse_call(line))
-                if ":" in line
-                else self.construct_ask_vector(self.parse_ask(line))
-            )
+            np.concatenate((
+                (self.construct_call_vector(self.parse_call(line)), np.zeros(ASK_LEN, dtype=int))
+                if ":" in line else 
+                (np.zeros(CALL_LEN, dtype=int), self.construct_ask_vector(self.parse_ask(line)))
+            ))
             for line in self.datarows[1:-1]
         ]
 
@@ -205,7 +204,7 @@ class FishGame:
     def get_state(self, i, player, ordered_state):
         i = i if i < len(self.hands) else -1
         return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
-                               ordered_state[i-1] if i else np.zeros(43)), axis=None)
+                               ordered_state[i-1] if i else np.zeros(CALL_LEN+ASK_LEN, dtype=int)), axis=None)
 
     def rotate(self, player):
         self.rewards = []
@@ -219,20 +218,19 @@ class FishGame:
     def memory(self, player):
         self.rotate(player)
         state = self.to_state() # get state with order shifting
-
-        is_player = lambda i: all(state[i][1:9] == self.encode_player(player))
-        is_ask = lambda i: not state[i][0] and is_player(i)
-        is_call = lambda i: state[i][0] and is_player(i)
+        
+        is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
+        is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         return [{
             'state': self.get_state(i, player, state),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
-                'call_set': state[i][1+8:1+8+9] if is_call(i) else None,
-                'call_cards': state[i][1+8+9:1+8+9+24].reshape((6,4)) if is_call(i) else None,
-                'ask_person': state[i][9:9+8][1::2] if is_ask(i) else None, 
-                'ask_set': state[i][9+8:9+8+9] if is_ask(i) else None,
-                'ask_card': state[i][9+8+9:9+8+9+6] if is_ask(i) else None,
+                'call_set': state[i][8:8+9] if is_call(i) else None,
+                'call_cards': state[i][8+9:8+9+24].reshape((6,4)) if is_call(i) else None,
+                'ask_person': state[i][CALL_LEN+8:CALL_LEN+8+8][1::2] if is_ask(i) else None, 
+                'ask_set': state[i][CALL_LEN+8+8:CALL_LEN+8+8+9] if is_ask(i) else None,
+                'ask_card': state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6] if is_ask(i) else None,
             },
             'next_state': self.get_state(i+1, player, state),
             'mask_dep': self.mask_dep(i, player),
