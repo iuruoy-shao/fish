@@ -10,15 +10,15 @@ import pickle
 
 class HandPrediction(nn.Module):
     def __init__(self):
-        super(QNetwork, self).__init__()
-        self.rnn = nn.LSTM(97, 512, 3, batch_first=True)
-        self.fc = nn.Linear(512, 486)
+        super(HandPrediction, self).__init__()
+        self.rnn = nn.LSTM(54+CALL_LEN+ASK_LEN, 512, 3, batch_first=True)
+        self.fc = nn.Linear(512, 8*54)
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
         return F.softmax(self.fc(out)
-                         .reshape(-1, 8, 54)
-                         .masked_fill(~mask, -1e9), dim=1)
+                         .reshape(-1,8,54)
+                         .masked_fill(~mask, -1e9), dim=2)
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -68,10 +68,17 @@ class QLearningAgent:
                                    else "cuda" if torch.cuda.is_available() 
                                    else "cpu")
 
+        self.hand_predictor = HandPrediction().to(self.device)
+        self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001)
+        self.hand_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.hand_optimizer, mode='min', factor=0.8, patience=5, 
+            verbose=True, min_lr=1e-6
+        )
+
         self.q_network = QNetwork().to(self.device)
-        self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.8, patience=5, 
+        self.q_optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
+        self.q_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.q_optimizer, mode='min', factor=0.8, patience=5, 
             verbose=True, min_lr=1e-6
         )
         self.loss = nn.MSELoss()
@@ -129,11 +136,11 @@ class QLearningAgent:
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
+            'hands': self.tensor(np.tile((cards_remaining > 0).reshape((-1,8,1)), (1,1,54)) 
+                                 * np.tile(np.repeat(sets_remaining, 6, axis=1)[:,np.newaxis,:], (1,8,1)), as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
-            'call_cards': self.tensor([np.tile(np.array(cards_remaining)[i, index % 2::2] > 0, (6, 1)) 
-                                       for i, index in enumerate(agent_index)], as_bool=True),  # the players on the team that still have cards
-            'ask_person': self.tensor([np.array(cards_remaining)[i, (index + 1) % 2::2] > 0 
-                                       for i, index in enumerate(agent_index)], as_bool=True),  # the players on the opposing team that still have cards
+            'call_cards': self.tensor(np.tile(cards_remaining[:,::2] > 0, (6, 1)), as_bool=True),  # the players on the team that still have cards
+            'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
             'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
         }
     
@@ -169,7 +176,7 @@ class QLearningAgent:
             for key in memory.keys()
         }
     
-    def handle_batch(self, batch):
+    def handle_q_batch(self, batch):
         batch_loss = 0
         for episode in batch:
             current_q = self.q_network(self.tensor(episode['state']), episode['action_masks'])
@@ -177,14 +184,24 @@ class QLearningAgent:
             batch_loss += self.q_loss(current_q, next_q, episode['action'], episode['reward'])
         return batch_loss
     
-    def train_on_data(self, memory, n_epochs, lr_schedule=True):
-        self.memory = []
-        for episode in memory:
-            unpacked = self.unpack_memory(episode)
-            unpacked['action_masks']  = self.action_masks(*unpacked['mask_dep'].values())
-            unpacked['next_action_masks'] = self.action_masks(*unpacked['next_mask_dep'].values())
-            self.memory.append(unpacked)
-
+    def accuracy(self, pred_hands, episode):
+        pred_hands = pred_hands.cpu().detach().numpy()
+        choices = np.argmax(pred_hands, axis=1)
+        one_hot = np.zeros_like(pred_hands)
+        one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
+        cards_remaining = np.sum(np.stack(episode['mask_dep']['sets_remaining']), axis=1) * 6
+        return (one_hot * episode['hands']).sum((1,2)) / cards_remaining
+    
+    def handle_hand_batch(self, batch):
+        batch_loss = 0
+        accuracies = []
+        for episode in batch:
+            pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
+            accuracies += self.accuracy(pred_hands, episode).tolist()
+            batch_loss += self.loss(self.tensor(episode['hands']), pred_hands)
+        return batch_loss / len(batch), sum(accuracies) / len(accuracies)
+    
+    def train_q_network(self, n_epochs, lr_schedule=True):
         for epoch in range(n_epochs):
             random.shuffle(self.memory)
             total_loss = 0
@@ -196,21 +213,63 @@ class QLearningAgent:
                     continue
 
                 batch = self.memory[i:i+self.batch_size]
-                loss = self.handle_batch(batch)
+                loss = self.handle_q_batch(batch)
                 total_loss += loss
                 batch_count += 1
 
-                self.optimizer.zero_grad()
+                self.q_optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
-                self.optimizer.step()
+                self.q_optimizer.step()
             
             train_avg_loss = total_loss / batch_count
             
             if lr_schedule:
-                self.scheduler.step(train_avg_loss)
+                self.q_scheduler.step(train_avg_loss)
             
-            print(f"epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, lr {self.optimizer.param_groups[0]['lr']}")
+            print(f"q_network epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}")
+    
+    def train_hand_predictor(self, n_epochs, lr_schedule=True):
+        for epoch in range(n_epochs):
+            random.shuffle(self.memory)
+            total_loss = 0
+            batch_count = 0
+            accuracies = []
+
+            self.q_network.train()
+            for i in range(0, len(self.memory), self.batch_size):
+                if i + self.batch_size > len(self.memory):
+                    continue
+
+                batch = self.memory[i:i+self.batch_size]
+                loss, acc = self.handle_hand_batch(batch)
+                total_loss += loss
+                accuracies.append(acc)
+                batch_count += 1
+
+                self.hand_optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.hand_predictor.parameters(), max_norm=1.0)
+                self.hand_optimizer.step()
+            
+            train_avg_loss = total_loss / batch_count
+            
+            if lr_schedule:
+                self.hand_scheduler.step(train_avg_loss)
+            
+            print(f"pred_hands epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies) / len(accuracies), 2)}, lr {self.hand_optimizer.param_groups[0]['lr']}")
+    
+    def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
+        self.memory = []
+        for episode in memory: # [[{}]] -> [{[]}]
+            unpacked = self.unpack_memory(episode)
+            unpacked['action_masks']  = self.action_masks(*unpacked['mask_dep'].values())
+            unpacked['next_action_masks'] = self.action_masks(*unpacked['next_mask_dep'].values())
+            unpacked['hands'] = np.stack(unpacked['hands'])
+            self.memory.append(unpacked)
+        
+        self.train_hand_predictor(hand_epochs, lr_schedule)
+        self.train_q_network(q_epochs, lr_schedule)
     
     def pickle_memory(self, memory, path='memory.pkl'):
         with open(path, 'wb') as f:
@@ -295,8 +354,8 @@ class QLearningAgent:
     def save_model(self, path='model.pth'):
         torch.save({
             'model_state_dict': self.q_network.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict() if hasattr(self, 'scheduler') else None,
+            'q_optimizer_state_dict': self.q_optimizer.state_dict(),
+            'q_scheduler_state_dict': self.q_scheduler.state_dict() if hasattr(self, 'q_scheduler') else None,
             'epsilon': self.epsilon,
             'gamma': self.gamma,
         }, path)
@@ -309,10 +368,10 @@ class QLearningAgent:
         checkpoint = torch.load(path, map_location=self.device)
         
         self.q_network.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
         
-        if checkpoint['scheduler_state_dict'] is not None and hasattr(self, 'scheduler'):
-            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
+            self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
             
         self.epsilon = checkpoint.get('epsilon', self.epsilon)
         self.gamma = checkpoint.get('gamma', self.gamma)
