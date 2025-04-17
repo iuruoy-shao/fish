@@ -270,7 +270,7 @@ class QLearningAgent:
         with open("sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
-        for player in game.players:
+        for player in game.players: # TODO: multithread this for cuda
             for _ in range(10):
                 game.shuffle()
                 memories.append(game.memory(player))
