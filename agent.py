@@ -1,4 +1,4 @@
-from verify_data import SimulatedFishGame
+from verify_data import SimulatedFishGame, CALL_LEN, ASK_LEN
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,7 +23,7 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.rnn = nn.LSTM(97, 256, 3, batch_first=True)
+        self.rnn = nn.LSTM(54+CALL_LEN+ASK_LEN, 256, 3, batch_first=True)
         
         self.fc4 = nn.Linear(256, 128)
         self.fc5 = nn.Linear(128, 64)
