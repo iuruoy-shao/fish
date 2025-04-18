@@ -145,7 +145,8 @@ class QLearningAgent:
         cards_remaining = np.array(cards_remaining)
         return {
             'hands': self.tensor(np.tile((cards_remaining > 0).reshape((-1,8,1)), (1,1,54)) 
-                                 * np.tile(np.repeat(sets_remaining, 6, axis=1)[:,np.newaxis,:], (1,8,1)), as_bool=True), # cards & players still in game
+                                 * np.tile(np.repeat(sets_remaining, 6, axis=1)[:,np.newaxis,:], (1,8,1))
+                                 * np.concat((np.reshape(hand, (-1,1,54)), ~(np.tile(np.reshape(hand, (-1,1,54)), (1,7,1)) > 0)), axis=1), as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
@@ -195,7 +196,7 @@ class QLearningAgent:
         for episode in batch:
             pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
             accuracies += self.accuracy(pred_hands, episode).tolist()
-            batch_loss += self.loss(self.tensor(episode['hands']), pred_hands)
+            batch_loss += self.loss(pred_hands, self.tensor(episode['hands']))
         return batch_loss / len(batch), sum(accuracies) / len(accuracies)
     
     def train_q_network(self, n_epochs, lr_schedule=True):
