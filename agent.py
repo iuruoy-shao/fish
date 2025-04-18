@@ -269,13 +269,13 @@ class QLearningAgent:
         self.train_hand_predictor(hand_epochs, lr_schedule)
         self.train_q_network(q_epochs, lr_schedule)
     
-    def pickle_memory(self, memory, path='memory.pkl'):
+    def pickle_memory(self, memory, path='stored_memories.pkl'):
         with open(path, 'wb') as f:
             pickle.dump(memory, f)
 
     def train_self_play(self, n_games, update_rate=5, q_epochs=10, hand_epochs=10, path='models/model.pth'):
         try:
-            with open('memory.pkl', 'rb') as f:
+            with open('stored_memories.pkl', 'rb') as f:
                 memories = pickle.load(f)
         except (FileNotFoundError, EOFError):
             memories = self.real_data
