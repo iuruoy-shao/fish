@@ -37,6 +37,7 @@ class QNetwork(nn.Module):
         self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
+        x = x.reshape(-1, 8*54)
         x = F.relu(self.fc4(x))
         x = F.relu(self.fc5(x))
         x = F.relu(self.fc6(x))
@@ -84,7 +85,8 @@ class QLearningAgent:
 
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
-        self.batch_size = 4
+        self.hand_batch_size = 4
+        self.q_batch_size = 32
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -207,11 +209,11 @@ class QLearningAgent:
             batch_count = 0
 
             self.q_network.train()
-            for i in range(0, len(self.memory), self.batch_size):
-                if i + self.batch_size > len(self.memory):
+            for i in range(0, len(self.memory), self.q_batch_size):
+                if i + self.q_batch_size > len(self.memory):
                     continue
 
-                batch = self.memory[i:i+self.batch_size]
+                batch = self.memory[i:i+self.q_batch_size]
                 loss = self.handle_q_batch(batch)
                 total_loss += loss
                 batch_count += 1
@@ -235,11 +237,11 @@ class QLearningAgent:
             accuracies = []
 
             self.hand_predictor.train()
-            for i in range(0, len(self.memory), self.batch_size):
-                if i + self.batch_size > len(self.memory):
+            for i in range(0, len(self.memory), self.hand_batch_size):
+                if i + self.hand_batch_size > len(self.memory):
                     continue
 
-                batch = self.memory[i:i+self.batch_size]
+                batch = self.memory[i:i+self.hand_batch_size]
                 loss, acc = self.handle_hand_batch(batch)
                 total_loss += loss
                 accuracies.append(acc)
