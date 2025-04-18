@@ -18,12 +18,12 @@ class HandPrediction(nn.Module):
         out, _ = self.rnn(x)
         return F.softmax(self.fc(out)
                          .reshape(-1,8,54)
-                         .masked_fill(~mask, -1e9), dim=2)
+                         .masked_fill(~mask, -1e9), dim=1)
 
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.rnn = nn.LSTM(54+CALL_LEN+ASK_LEN, 256, 3, batch_first=True)
+        self.rnn = nn.LSTM(8*54, 256, 3, batch_first=True)
         
         self.fc4 = nn.Linear(256, 128)
         self.fc5 = nn.Linear(128, 64)
@@ -38,6 +38,7 @@ class QNetwork(nn.Module):
         self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
+        x = x.reshape(-1, 8*54)
         out, _ = self.rnn(x)
         h = F.relu(self.fc4(out))
         h = F.relu(self.fc5(h))
@@ -139,7 +140,7 @@ class QLearningAgent:
             'hands': self.tensor(np.tile((cards_remaining > 0).reshape((-1,8,1)), (1,1,54)) 
                                  * np.tile(np.repeat(sets_remaining, 6, axis=1)[:,np.newaxis,:], (1,8,1)), as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
-            'call_cards': self.tensor(np.tile(cards_remaining[:,::2] > 0, (6, 1)), as_bool=True),  # the players on the team that still have cards
+            'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
             'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
         }
@@ -179,8 +180,8 @@ class QLearningAgent:
     def handle_q_batch(self, batch):
         batch_loss = 0
         for episode in batch:
-            current_q = self.q_network(self.tensor(episode['state']), episode['action_masks'])
-            next_q = self.q_network(self.tensor(episode['next_state']), episode['next_action_masks'])
+            current_q = self.q_network(self.tensor(episode['hands']), episode['action_masks'])
+            next_q = self.q_network(self.tensor(episode['hands']), episode['next_action_masks'])
             batch_loss += self.q_loss(current_q, next_q, episode['action'], episode['reward'])
         return batch_loss
     
@@ -275,7 +276,7 @@ class QLearningAgent:
         with open(path, 'wb') as f:
             pickle.dump(memory, f)
 
-    def train_self_play(self, n_games, update_rate=5, epochs=10, path='models/model.pth'):
+    def train_self_play(self, n_games, update_rate=5, q_epochs=10, hand_epochs=10, path='models/model.pth'):
         try:
             with open('memory.pkl', 'rb') as f:
                 memories = pickle.load(f)
@@ -288,11 +289,11 @@ class QLearningAgent:
             memories += memory if len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories collected")
             if i % update_rate == 0 and i:
-                self.train_on_data(memories_batch, epochs, lr_schedule=False)
+                self.train_on_data(memories_batch, q_epochs, hand_epochs, lr_schedule=False)
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i:
                 if len(memories):
-                    self.train_on_data(memories, epochs, lr_schedule=False)
+                    self.train_on_data(memories, q_epochs, hand_epochs, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
 
