@@ -233,7 +233,7 @@ class FishGame:
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         return [{
-            'state': self.get_state(i, player, state),
+            'state': self.get_state(i, player, state)[54:],
             'hands': self.encode_all_hands(i),
             'next_hands': self.encode_all_hands(i+1),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team

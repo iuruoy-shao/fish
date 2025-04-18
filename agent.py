@@ -12,8 +12,8 @@ from tqdm import tqdm
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(54+CALL_LEN+ASK_LEN, 512, 3, batch_first=True)
-        self.fc = nn.Linear(512, 8*54)
+        self.rnn = nn.LSTM(CALL_LEN+ASK_LEN, 64, 2, batch_first=True, dropout=0.5)
+        self.fc = nn.Linear(64, 8*54)
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
@@ -68,7 +68,7 @@ class QLearningAgent:
                                    else "cpu")
 
         self.hand_predictor = HandPrediction().to(self.device)
-        self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001)
+        self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001, weight_decay=1e-5)
         self.hand_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.hand_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
@@ -84,7 +84,7 @@ class QLearningAgent:
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
         self.hand_batch_size = 128
-        self.q_batch_size = 32
+        self.q_batch_size = 128
 
     def tensor(self, x, as_bool=False):
         if as_bool:
