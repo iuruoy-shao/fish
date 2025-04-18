@@ -185,12 +185,9 @@ class QLearningAgent:
         }
     
     def handle_q_batch(self, batch):
-        batch_loss = 0
-        for episode in batch:
-            current_q = self.q_network(self.tensor(episode['hands']), episode['action_masks'])
-            next_q = self.q_network(self.tensor(episode['hands']), episode['next_action_masks'])
-            batch_loss += self.q_loss(current_q, next_q, episode['action'], episode['reward'])
-        return batch_loss
+        current_q = self.q_network(self.tensor(batch['hands']), batch['action_masks'])
+        next_q = self.q_network(self.tensor(batch['hands']), batch['next_action_masks'])
+        return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def handle_hand_batch(self, batch):
         batch_loss = 0
@@ -204,6 +201,7 @@ class QLearningAgent:
     def train_q_network(self, n_epochs, lr_schedule=True):
         t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
+            self.memory = [x for xs in self.memory for x in xs]
             random.shuffle(self.memory)
             total_loss = 0
             batch_count = 0

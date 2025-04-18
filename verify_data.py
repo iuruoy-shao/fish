@@ -274,7 +274,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = .5
+        self.help_threshold = .2
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
