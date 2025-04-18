@@ -204,6 +204,12 @@ class FishGame:
     def encode_all_hands(self, i):
         return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
+    def decode_all_hands(self, hands): # shape, 8 x 54
+        card_assignments = {player:set() for player in self.players}
+        for i, index in enumerate(np.argmax(hands.T, axis=1).reshape(-1)):
+            card_assignments[self.players[index]].add(list(card_to_vector.keys())[i])
+        return card_assignments
+                
     def get_state(self, i, player, ordered_state):
         i = i if i < len(self.hands) else -1
         return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
