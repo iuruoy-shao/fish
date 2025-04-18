@@ -4,10 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 import numpy as np
-from tqdm import tqdm
 import random
 import os
 import pickle
+from tqdm import tqdm
 
 class HandPrediction(nn.Module):
     def __init__(self):
@@ -202,14 +202,14 @@ class QLearningAgent:
         return batch_loss / len(batch), sum(accuracies) / len(accuracies)
     
     def train_q_network(self, n_epochs, lr_schedule=True):
-        for epoch in range(n_epochs):
+        t = tqdm(range(n_epochs), desc="Training Q-Network")
+        for epoch in t:
             random.shuffle(self.memory)
             total_loss = 0
             batch_count = 0
 
             self.q_network.train()
-
-            for i in tqdm(range(0, len(self.memory), self.batch_size), desc=f"Q-network epoch {epoch+1}/{n_epochs}"):
+            for i in range(0, len(self.memory), self.batch_size):
                 if i + self.batch_size > len(self.memory):
                     continue
 
@@ -224,22 +224,20 @@ class QLearningAgent:
                 self.q_optimizer.step()
             
             train_avg_loss = total_loss / batch_count
-            
             if lr_schedule:
                 self.q_scheduler.step(train_avg_loss)
-            
-            print(f"q_network epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}")
+            t.set_description(f"Training Q-Network, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
-        for epoch in range(n_epochs):
+        t = tqdm(range(n_epochs), desc="Training Hand Predictor")
+        for epoch in t:
             random.shuffle(self.memory)
             total_loss = 0
             batch_count = 0
             accuracies = []
 
-            self.hand_optimizer.train()
-
-            for i in tqdm(range(0, len(self.memory), self.batch_size), desc=f"Hand predictor epoch {epoch+1}/{n_epochs}"):
+            self.hand_predictor.train()
+            for i in range(0, len(self.memory), self.batch_size):
                 if i + self.batch_size > len(self.memory):
                     continue
 
@@ -255,11 +253,9 @@ class QLearningAgent:
                 self.hand_optimizer.step()
             
             train_avg_loss = total_loss / batch_count
-            
             if lr_schedule:
                 self.hand_scheduler.step(train_avg_loss)
-            
-            print(f"pred_hands epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies) / len(accuracies), 2)}, lr {self.hand_optimizer.param_groups[0]['lr']}")
+            t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
         self.memory = []
@@ -339,7 +335,7 @@ class QLearningAgent:
 
     def act(self, state, mask):
         self.q_network.eval()
-        self.hand_optimizer.eval()
+        self.hand_predictor.eval()
         with torch.no_grad():
             pred_hands = self.hand_predictor(state, mask['hands'])
             q_vals = self.q_network(pred_hands, mask)
