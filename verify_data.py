@@ -41,7 +41,8 @@ class ParseError(Exception):
 class FishGame:
     def __init__(self, datarows):
         self.datarows = datarows
-        self.init_hands = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(',')) for player in self.datarows[0].split()}
+        self.init_hands = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(',')) 
+                           for player in self.datarows[0].split()}
         self.players = list(self.init_hands.keys())
         self.score = [0, 0]
         self.rewards = [] # encodes for even team, reverse for odd team
@@ -146,10 +147,8 @@ class FishGame:
              else rewards['incorrect_opponent_call'])
         )
 
-        # encoding caller
         state_array = self.encode_player(calling_p)
 
-        # encoding calls
         called_set = False
         v_call = np.array([])
         for player in self.teammates(calling_p):
@@ -162,8 +161,10 @@ class FishGame:
                     c += card_to_vector[card][9:]
             c = c > 0
             v_call = np.concatenate((v_call, c))
-        # encoding status
-        state_array = np.concatenate((state_array, np.pad(v_call,(0,24-len(v_call))).reshape(4,6).T.flatten(), np.array([status])))
+
+        state_array = np.concatenate((state_array, 
+                                      np.pad(v_call,(0,24-len(v_call))).reshape(4,6).T.flatten(), 
+                                      np.array([status])))
         return state_array
 
     def construct_ask_vector(self, ask):
@@ -202,7 +203,8 @@ class FishGame:
         return hand_vector.flatten() if flatten else hand_vector
     
     def encode_all_hands(self, i):
-        return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] + [self.encode_hand({})] * (8-len(self.players)), axis=0)
+        return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] 
+                        + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
     def decode_all_hands(self, hands): # shape, 8 x 54
         card_assignments = {player:set() for player in self.players}
@@ -217,7 +219,7 @@ class FishGame:
 
     def rotate(self, player):
         self.rewards = []
-        self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)] # changing order
+        self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)]
     
     def last_hand_index(self, player):
         for i, hand in enumerate(self.hands[::-1]):
@@ -287,7 +289,8 @@ class SimulatedFishGame(FishGame):
         self.assign_hands()
         self.hands = [self.init_hands]
         self.rewards = []
-        self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" for player in self.players])}\n', 'temp_score']
+        self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" 
+                         for player in self.players])}\n', 'temp_score']
         self.turn = random.choice(self.players)
 
     def ended(self):
@@ -356,7 +359,8 @@ class SimulatedFishGame(FishGame):
 
         for hand in new_hands.values():
             hand -= set(sets[call_set])
-        return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
+        return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" 
+                           for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
 
     def handle_ask(self, action, new_hands, player):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
