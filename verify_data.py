@@ -10,9 +10,9 @@ ASK_LEN = 32
 rewards = {
     'correct_call': 1,
     'incorrect_call': -1,
-    'correct_team_call': 1,
+    'correct_team_call': 0,
     'incorrect_team_call': 0,
-    'correct_opponent_call': -1,
+    'correct_opponent_call': 0,
     'incorrect_opponent_call': 0,
     'correct_ask': 0,
     'incorrect_ask': 0,
