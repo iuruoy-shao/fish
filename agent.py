@@ -12,7 +12,7 @@ from tqdm import tqdm
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(CALL_LEN+ASK_LEN, 64, 2, batch_first=True, dropout=0.5)
+        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 64, 2, batch_first=True, dropout=0.5)
         self.fc = nn.Linear(64, 8*54)
         
     def forward(self, x, mask):
@@ -139,7 +139,7 @@ class QLearningAgent:
         cards_remaining = np.sum(np.stack(episode['mask_dep']['sets_remaining']), axis=1) * 6
         return (one_hot * episode['hands']).sum((1,2)) / cards_remaining
     
-    def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
+    def action_masks(self, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
             'hands': self.tensor(np.tile((cards_remaining > 0).reshape((-1,8,1)), (1,1,54)) 

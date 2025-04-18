@@ -212,10 +212,9 @@ class FishGame:
             card_assignments[self.players[index]].add(list(card_to_vector.keys())[i])
         return card_assignments
                 
-    def get_state(self, i, player, ordered_state):
+    def get_state(self, i, ordered_state):
         i = i if i < len(self.hands) else -1
-        return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
-                               ordered_state[i-1] if i else np.zeros(CALL_LEN+ASK_LEN, dtype=int)), axis=None)
+        return np.concatenate((self.cards_remaining(i), ordered_state[i-1] if i else np.zeros(CALL_LEN+ASK_LEN, dtype=int)))
 
     def rotate(self, player):
         self.rewards = []
@@ -233,7 +232,7 @@ class FishGame:
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         return [{
-            'state': self.get_state(i, player, state)[54:],
+            'state': self.get_state(i, state),
             'hands': self.encode_all_hands(i),
             'next_hands': self.encode_all_hands(i+1),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
@@ -255,13 +254,15 @@ class FishGame:
             cards_remaining += self.encode_hand(hand, flatten=False)
         return (np.sum(cards_remaining, axis=1) > 0).astype(int)
     
+    def cards_remaining(self, i):
+        return np.array([len(self.hands[i][player]) for player in self.players] 
+                        + ([0, 0] if len(self.players) == 6 else []))
+    
     def mask_dep(self, i, player):
         return {
-            'agent_index': self.players.index(player),
             'hand': self.encode_hand(self.hands[i][player], flatten=False), # 9x6
             'sets_remaining': self.sets_remaining(i),
-            'cards_remaining': np.array([len(self.hands[i][player]) for player in self.players] 
-                                        + ([0, 0] if len(self.players) == 6 else [])) # pad to length 8
+            'cards_remaining': self.cards_remaining(i),
         }
 
     def verify(self):
