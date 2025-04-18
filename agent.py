@@ -70,22 +70,20 @@ class QLearningAgent:
         self.hand_predictor = HandPrediction().to(self.device)
         self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001)
         self.hand_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.hand_optimizer, mode='min', factor=0.8, patience=5, 
-            verbose=True, min_lr=1e-6
+            self.hand_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
 
         self.q_network = QNetwork().to(self.device)
         self.q_optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
         self.q_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.q_optimizer, mode='min', factor=0.8, patience=5, 
-            verbose=True, min_lr=1e-6
+            self.q_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
         self.loss = nn.MSELoss()
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
-        self.hand_batch_size = 4
+        self.hand_batch_size = 128
         self.q_batch_size = 32
 
     def tensor(self, x, as_bool=False):
@@ -146,7 +144,9 @@ class QLearningAgent:
         return {
             'hands': self.tensor(np.tile((cards_remaining > 0).reshape((-1,8,1)), (1,1,54)) 
                                  * np.tile(np.repeat(sets_remaining, 6, axis=1)[:,np.newaxis,:], (1,8,1))
-                                 * np.concat((np.reshape(hand, (-1,1,54)), ~(np.tile(np.reshape(hand, (-1,1,54)), (1,7,1)) > 0)), axis=1), as_bool=True), # cards & players still in game
+                                 * np.concat((np.reshape(hand, (-1,1,54)), 
+                                              ~(np.tile(np.reshape(hand, (-1,1,54)), (1,7,1)) > 0)), axis=1), 
+                                 as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
