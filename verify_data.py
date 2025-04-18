@@ -201,6 +201,9 @@ class FishGame:
             hand_vector[np.where(sets_array == card)[0][0]][np.where(sets_array == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
+    def encode_all_hands(self, i):
+        return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] + [self.encode_hand({})] * (8-len(self.players)), axis=0)
+    
     def get_state(self, i, player, ordered_state):
         i = i if i < len(self.hands) else -1
         return np.concatenate((self.encode_hand(self.hands[i][player]).reshape(1,54), 
@@ -223,7 +226,7 @@ class FishGame:
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         return [{
             'state': self.get_state(i, player, state),
-            'hands': np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] + [self.encode_hand({})] * (8-len(self.players)), axis=0),
+            'hands': self.encode_all_hands(i),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
@@ -271,7 +274,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = .3
+        self.help_threshold = .5
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]

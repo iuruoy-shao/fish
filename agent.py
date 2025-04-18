@@ -133,6 +133,14 @@ class QLearningAgent:
         return self.loss(self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions)), 
                          self.target_q(torch.stack(next_qs), self.tensor(rewards)))
     
+    def accuracy(self, pred_hands, episode):
+        pred_hands = pred_hands.cpu().detach().numpy()
+        choices = np.argmax(pred_hands, axis=1)
+        one_hot = np.zeros_like(pred_hands)
+        one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
+        cards_remaining = np.sum(np.stack(episode['mask_dep']['sets_remaining']), axis=1) * 6
+        return (one_hot * episode['hands']).sum((1,2)) / cards_remaining
+    
     def action_masks(self, agent_index, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
         return {
@@ -183,14 +191,6 @@ class QLearningAgent:
             next_q = self.q_network(self.tensor(episode['hands']), episode['next_action_masks'])
             batch_loss += self.q_loss(current_q, next_q, episode['action'], episode['reward'])
         return batch_loss
-    
-    def accuracy(self, pred_hands, episode):
-        pred_hands = pred_hands.cpu().detach().numpy()
-        choices = np.argmax(pred_hands, axis=1)
-        one_hot = np.zeros_like(pred_hands)
-        one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
-        cards_remaining = np.sum(np.stack(episode['mask_dep']['sets_remaining']), axis=1) * 6
-        return (one_hot * episode['hands']).sum((1,2)) / cards_remaining
     
     def handle_hand_batch(self, batch):
         batch_loss = 0
@@ -257,7 +257,7 @@ class QLearningAgent:
                 self.hand_scheduler.step(train_avg_loss)
             t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies)/len(accuracies), 2)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
-    def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
+    def load_memory(self, memory):
         self.memory = []
         for episode in memory: # [[{}]] -> [{[]}]
             unpacked = self.unpack_memory(episode)
@@ -265,7 +265,9 @@ class QLearningAgent:
             unpacked['next_action_masks'] = self.action_masks(*unpacked['next_mask_dep'].values())
             unpacked['hands'] = np.stack(unpacked['hands'])
             self.memory.append(unpacked)
-        
+            
+    def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
+        self.load_memory(memory)
         self.train_hand_predictor(hand_epochs, lr_schedule)
         self.train_q_network(q_epochs, lr_schedule)
     
@@ -290,7 +292,7 @@ class QLearningAgent:
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i:
                 if len(memories) > 50: # sampling
-                    self.train_on_data(random.sample(memories, 50), q_epochs, hand_epochs, lr_schedule=False)
+                    self.train_on_data(random.sample(memories, 50), q_epochs*3, hand_epochs*3, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
 
@@ -304,7 +306,8 @@ class QLearningAgent:
                 game.rotate(player)
                 state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
-                action = self.act(state, mask)
+                pred_hands, action = self.act(state, mask)
+                # print(f"hand pred acc: {round(self.accuracy(pred_hands, {'mask': mask, 'hands': game.encode_all_hands(len(game.hands)-1), 'mask_dep': self.unpack_memory([game.mask_dep(len(game.hands)-1, player)])})[0], 2)}")
                 actions[player] = action
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
@@ -349,7 +352,7 @@ class QLearningAgent:
                     for i in range(6):
                         row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
             result[key] = row_data
-        return result
+        return pred_hands, result
     
     def save_model(self, path='model.pth'):
         torch.save({
