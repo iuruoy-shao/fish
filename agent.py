@@ -289,8 +289,8 @@ class QLearningAgent:
                 self.train_on_data(memories_batch, q_epochs, hand_epochs, lr_schedule=False)
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i:
-                if len(memories):
-                    self.train_on_data(memories, q_epochs, hand_epochs, lr_schedule=False)
+                if len(memories) > 50: # sampling
+                    self.train_on_data(random.sample(memories, 50), q_epochs, hand_epochs, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
 
