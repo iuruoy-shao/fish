@@ -12,12 +12,13 @@ from tqdm import tqdm
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 64, 2, batch_first=True, dropout=0.5)
+        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 64, batch_first=True)
+        self.dropout = nn.Dropout(0.5)
         self.fc = nn.Linear(64, 8*54)
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
-        return F.softmax(self.fc(out)
+        return F.softmax(self.fc(self.dropout(out))
                          .reshape(-1,8,54)
                          .masked_fill(~mask, -1e9), dim=1).masked_fill(~mask, 0)
 
@@ -79,11 +80,12 @@ class QLearningAgent:
             self.q_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
         self.loss = nn.MSELoss()
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
-        self.hand_batch_size = 128
+        self.hand_batch_size = 16
         self.q_batch_size = 128
 
     def tensor(self, x, as_bool=False):
@@ -196,7 +198,7 @@ class QLearningAgent:
         for episode in batch:
             pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
             accuracies += self.accuracy(pred_hands, episode).tolist()
-            batch_loss += self.loss(pred_hands, self.tensor(episode['hands']))
+            batch_loss += self.cross_entropy_loss(pred_hands, self.tensor(episode['hands']))
         return batch_loss / len(batch), sum(accuracies) / len(accuracies)
     
     def train_q_network(self, n_epochs, lr_schedule=True):
@@ -252,17 +254,19 @@ class QLearningAgent:
                 torch.nn.utils.clip_grad_norm_(self.hand_predictor.parameters(), max_norm=1.0)
                 self.hand_optimizer.step()
                 
-                test_accuracies = []
-                self.hand_predictor.eval()
-                with torch.no_grad():
-                    for episode in test_memory:
-                        pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
-                        test_accuracies += self.accuracy(pred_hands, episode).tolist()
-                test_accuracy = sum(test_accuracies) / len(test_accuracies)
+            test_accuracies = []
+            test_loss = 0
+            self.hand_predictor.eval()
+            with torch.no_grad():
+                for episode in test_memory:
+                    pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
+                    test_accuracies += self.accuracy(pred_hands, episode).tolist()
+                    test_loss += self.cross_entropy_loss(pred_hands, self.tensor(episode['hands']))
+            test_accuracy = sum(test_accuracies) / len(test_accuracies)
             
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
-                self.hand_scheduler.step(train_avg_loss)
+                self.hand_scheduler.step(test_loss / 3)
             t.set_description(f"Training Hand Predictor, epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, train acc {round(sum(accuracies)/len(accuracies), 2)}, test acc {round(test_accuracy, 2)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
