@@ -322,7 +322,7 @@ class SimulatedFishGame(FishGame):
             self.random_pass()
             
     def monopolized_set(self, hands):
-        team0_hands = set().union(*list(hands.values())[::2])
+        team0_hands = set().union(*(hands[ref_player] for ref_player in self.players[::2]))
         for i, card_set in enumerate(sets):
             card_set = set(card_set)
             if card_set.issubset(team0_hands):
