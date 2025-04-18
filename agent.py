@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 import numpy as np
+from tqdm import tqdm
 import random
 import os
 import pickle
@@ -23,9 +24,8 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.rnn = nn.LSTM(8*54, 256, 3, batch_first=True)
+        self.rnn = nn.LSTM(8*54, 128, 3, batch_first=True)
         
-        self.fc4 = nn.Linear(256, 128)
         self.fc5 = nn.Linear(128, 64)
         self.fc6 = nn.Linear(64, 32)
         
@@ -40,8 +40,7 @@ class QNetwork(nn.Module):
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
         out, _ = self.rnn(x)
-        h = F.relu(self.fc4(out))
-        h = F.relu(self.fc5(h))
+        h = F.relu(self.fc5(out))
         h = F.relu(self.fc6(h))
 
         to_call = self.to_call(h)
@@ -209,7 +208,8 @@ class QLearningAgent:
             batch_count = 0
 
             self.q_network.train()
-            for i in range(0, len(self.memory), self.batch_size):
+
+            for i in tqdm(range(0, len(self.memory), self.batch_size), desc=f"Q-network epoch {epoch+1}/{n_epochs}"):
                 if i + self.batch_size > len(self.memory):
                     continue
 
@@ -237,8 +237,9 @@ class QLearningAgent:
             batch_count = 0
             accuracies = []
 
-            self.q_network.train()
-            for i in range(0, len(self.memory), self.batch_size):
+            self.hand_optimizer.train()
+
+            for i in tqdm(range(0, len(self.memory), self.batch_size), desc=f"Hand predictor epoch {epoch+1}/{n_epochs}"):
                 if i + self.batch_size > len(self.memory):
                     continue
 
@@ -338,8 +339,10 @@ class QLearningAgent:
 
     def act(self, state, mask):
         self.q_network.eval()
+        self.hand_optimizer.eval()
         with torch.no_grad():
-            q_vals = self.q_network(state, mask)
+            pred_hands = self.hand_predictor(state, mask['hands'])
+            q_vals = self.q_network(pred_hands, mask)
         result = {}
         for key in q_vals.keys():
             row_data = q_vals[key][0].cpu().detach().numpy()
