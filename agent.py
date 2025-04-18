@@ -162,8 +162,8 @@ class QLearningAgent:
             for key in batch[0].keys()
         }
 
-    def shuffle_memory(self):
-        indices = list(range(len(self.memory['state'])))
+    def shuffle_stacked_memory(self):
+        indices = list(range(len(self.stacked_memory['state'])))
         random.shuffle(indices)
         
         def shuffle_item(item, idx_list):
@@ -173,7 +173,7 @@ class QLearningAgent:
                 return [item[i] for i in idx_list]
             elif isinstance(item, torch.Tensor):
                 return torch.stack([item[i] for i in idx_list])
-        self.memory = {key: shuffle_item(value, indices) for key, value in self.memory.items()}
+        self.stacked_memory = {key: shuffle_item(value, indices) for key, value in self.stacked_memory.items()}
     
     def pick_batch(self, memory, indices):
         start, end = indices
@@ -201,17 +201,15 @@ class QLearningAgent:
     def train_q_network(self, n_epochs, lr_schedule=True):
         t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
-            self.memory = [x for xs in self.memory for x in xs]
-            random.shuffle(self.memory)
+            self.shuffle_stacked_memory()
             total_loss = 0
             batch_count = 0
 
             self.q_network.train()
-            for i in range(0, len(self.memory), self.q_batch_size):
-                if i + self.q_batch_size > len(self.memory):
+            for i in range(0, len(self.stacked_memory['state']), self.q_batch_size):
+                if i + self.q_batch_size > len(self.stacked_memory['state']):
                     continue
-
-                batch = self.memory[i:i+self.q_batch_size]
+                batch = self.pick_batch(self.stacked_memory,(i,i+self.q_batch_size))
                 loss = self.handle_q_batch(batch)
                 total_loss += loss
                 batch_count += 1
@@ -256,6 +254,10 @@ class QLearningAgent:
             t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies)/len(accuracies), 2)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
+        self.stacked_memory = self.unpack_memory([x for xs in memory for x in xs])
+        self.stacked_memory['action_masks']  = self.action_masks(*self.stacked_memory['mask_dep'].values())
+        self.stacked_memory['next_action_masks'] = self.action_masks(*self.stacked_memory['next_mask_dep'].values())
+        
         self.memory = []
         for episode in memory: # [[{}]] -> [{[]}]
             unpacked = self.unpack_memory(episode)
