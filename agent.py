@@ -24,8 +24,7 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.rnn = nn.LSTM(8*54, 128, 3, batch_first=True)
-        
+        self.fc4 = nn.Linear(8*54, 128)
         self.fc5 = nn.Linear(128, 64)
         self.fc6 = nn.Linear(64, 32)
         
@@ -38,18 +37,17 @@ class QNetwork(nn.Module):
         self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
         
     def forward(self, x, action_masks):
-        x = x.reshape(-1, 8*54)
-        out, _ = self.rnn(x)
-        h = F.relu(self.fc5(out))
-        h = F.relu(self.fc6(h))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc6(x))
 
-        to_call = self.to_call(h)
-        call_set = self.pick_call_set(h)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((h, call_set), dim=1)), (-1, 6, 4))
+        to_call = self.to_call(x)
+        call_set = self.pick_call_set(x)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), dim=1)), (-1, 6, 4))
 
-        ask_person = self.pick_person(h)
-        ask_set = self.pick_ask_set(torch.cat((h, ask_person), dim=1))
-        ask_card = self.pick_ask_card(torch.cat((h, ask_person, ask_set), dim=1))
+        ask_person = self.pick_person(x)
+        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
+        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
 
         return {
             'call': to_call,
