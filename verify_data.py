@@ -233,6 +233,7 @@ class FishGame:
         return [{
             'state': self.get_state(i, player, state),
             'hands': self.encode_all_hands(i),
+            'next_hands': self.encode_all_hands(i+1),
             'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
@@ -242,7 +243,6 @@ class FishGame:
                 'ask_set': state[i][CALL_LEN+8+8:CALL_LEN+8+8+9] if is_ask(i) else None,
                 'ask_card': state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6] if is_ask(i) else None,
             },
-            'next_state': self.get_state(i+1, player, state),
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
         } for i in range(self.last_hand_index(player))]

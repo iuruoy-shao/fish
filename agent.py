@@ -187,7 +187,7 @@ class QLearningAgent:
     
     def handle_q_batch(self, batch):
         current_q = self.q_network(self.tensor(batch['hands']), batch['action_masks'])
-        next_q = self.q_network(self.tensor(batch['hands']), batch['next_action_masks'])
+        next_q = self.q_network(self.tensor(batch['next_hands']), batch['next_action_masks'])
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def handle_hand_batch(self, batch):
@@ -367,17 +367,16 @@ class QLearningAgent:
             result[key] = row_data
         return pred_hands, result
     
-    def save_model(self, path='model.pth'):
-        torch.save({
+    def save_model(self, path='model.pth', q_network=True, hand_predictor=True):
+        torch.save({**({
             'q_network_state_dict': self.q_network.state_dict(),
-            'hand_predictor_state_dict': self.hand_predictor.state_dict(),
             'q_optimizer_state_dict': self.q_optimizer.state_dict(),
-            'hand_optimizer_state_dict': self.hand_optimizer.state_dict(),
             'q_scheduler_state_dict': self.q_scheduler.state_dict() if hasattr(self, 'q_scheduler') else None,
+        } if q_network else {}), **({
             'hand_scheduler_state_dict': self.hand_scheduler.state_dict() if hasattr(self, 'hand_scheduler') else None,
-            'epsilon': self.epsilon,
-            'gamma': self.gamma,
-        }, path)
+            'hand_predictor_state_dict': self.hand_predictor.state_dict(),
+            'hand_optimizer_state_dict': self.hand_optimizer.state_dict(),
+        } if hand_predictor else {})}, path)
         print(f"Model saved to {path}")
         
     def load_model(self, path='model.pth'):
@@ -386,17 +385,15 @@ class QLearningAgent:
             
         checkpoint = torch.load(path, map_location=self.device)
         
-        self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
-        self.hand_predictor.load_state_dict(checkpoint['hand_predictor_state_dict'])
-        self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
-        self.hand_optimizer.load_state_dict(checkpoint['hand_optimizer_state_dict'])
-        
-        if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
-            self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
-        if checkpoint['hand_scheduler_state_dict'] is not None and hasattr(self, 'hand_scheduler'):
-            self.hand_scheduler.load_state_dict(checkpoint['hand_scheduler_state_dict'])
-            
-        self.epsilon = checkpoint.get('epsilon', self.epsilon)
-        self.gamma = checkpoint.get('gamma', self.gamma)
+        if 'hand_predictor_state_dict' in checkpoint:
+            self.hand_predictor.load_state_dict(checkpoint['hand_predictor_state_dict'])
+            self.hand_optimizer.load_state_dict(checkpoint['hand_optimizer_state_dict'])
+            if checkpoint['hand_scheduler_state_dict'] is not None and hasattr(self, 'hand_scheduler'):
+                self.hand_scheduler.load_state_dict(checkpoint['hand_scheduler_state_dict'])
+        if 'q_network_state_dict' in checkpoint:
+            self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
+            self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
+            if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
+                self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
         
         return True
