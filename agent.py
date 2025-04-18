@@ -19,7 +19,7 @@ class HandPrediction(nn.Module):
         out, _ = self.rnn(x)
         return F.softmax(self.fc(out)
                          .reshape(-1,8,54)
-                         .masked_fill(~mask, -1e9), dim=1)
+                         .masked_fill(~mask, -1e9), dim=1).masked_fill(~mask, 0)
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -226,6 +226,9 @@ class QLearningAgent:
             t.set_description(f"Training Q-Network, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
+        test_memory = self.memory[-3:]
+        self.memory = self.memory[:-3]
+        
         t = tqdm(range(n_epochs), desc="Training Hand Predictor")
         for epoch in t:
             random.shuffle(self.memory)
@@ -233,8 +236,8 @@ class QLearningAgent:
             batch_count = 0
             accuracies = []
 
-            self.hand_predictor.train()
             for i in range(0, len(self.memory), self.hand_batch_size):
+                self.hand_predictor.train()
                 if i + self.hand_batch_size > len(self.memory):
                     continue
 
@@ -248,11 +251,19 @@ class QLearningAgent:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.hand_predictor.parameters(), max_norm=1.0)
                 self.hand_optimizer.step()
+                
+                test_accuracies = []
+                self.hand_predictor.eval()
+                with torch.no_grad():
+                    for episode in test_memory:
+                        pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
+                        test_accuracies += self.accuracy(pred_hands, episode).tolist()
+                test_accuracy = sum(test_accuracies) / len(test_accuracies)
             
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
                 self.hand_scheduler.step(train_avg_loss)
-            t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies)/len(accuracies), 2)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            t.set_description(f"Training Hand Predictor, epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, train acc {round(sum(accuracies)/len(accuracies), 2)}, test acc {round(test_accuracy, 2)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
         self.stacked_memory = self.unpack_memory([x for xs in memory for x in xs])
@@ -308,6 +319,7 @@ class QLearningAgent:
                 state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 pred_hands, action = self.act(state, mask)
+                print(game.datarows[-2], game.decode_all_hands(pred_hands.cpu().detach().numpy()))
                 # print(f"hand pred acc: {round(self.accuracy(pred_hands, {'mask': mask, 'hands': game.encode_all_hands(len(game.hands)-1), 'mask_dep': self.unpack_memory([game.mask_dep(len(game.hands)-1, player)])})[0], 2)}")
                 actions[player] = action
                 if action['call'][0] > action['call'][1] and not acted:
