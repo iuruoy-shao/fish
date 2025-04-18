@@ -255,7 +255,7 @@ class QLearningAgent:
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
                 self.hand_scheduler.step(train_avg_loss)
-            t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            t.set_description(f"Training Hand Predictor, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, avg acc {round(sum(accuracies)/len(accuracies), 2)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
         self.memory = []
