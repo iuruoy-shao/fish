@@ -12,9 +12,9 @@ from tqdm import tqdm
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 64, batch_first=True)
+        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, batch_first=True)
         self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(64, 8*54)
+        self.fc = nn.Linear(128, 8*54)
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
@@ -135,12 +135,13 @@ class QLearningAgent:
     
     def accuracy(self, pred_hands, episode):
         pred_hands = pred_hands.cpu().detach().numpy()
-        print(pred_hands[0])
         choices = np.argmax(pred_hands, axis=1)
         one_hot = np.zeros_like(pred_hands)
         one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
         cards_remaining = np.sum(np.stack(episode['mask_dep']['sets_remaining']), axis=1) * 6
-        return (one_hot * episode['hands']).sum((1,2)) / cards_remaining
+        guarantee = np.stack(episode['mask_dep']['cards_remaining'])[:,0]
+        accuracies = ((one_hot * episode['hands']).sum((1,2)) - guarantee) / (cards_remaining - guarantee)
+        return accuracies[~np.isnan(accuracies)]
     
     def action_masks(self, hand, sets_remaining, cards_remaining):
         cards_remaining = np.array(cards_remaining)
