@@ -69,7 +69,7 @@ class QLearningAgent:
                                    else "cpu")
 
         self.hand_predictor = HandPrediction().to(self.device)
-        self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001, weight_decay=1e-5)
+        self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001)
         self.hand_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.hand_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
@@ -135,6 +135,7 @@ class QLearningAgent:
     
     def accuracy(self, pred_hands, episode):
         pred_hands = pred_hands.cpu().detach().numpy()
+        print(pred_hands[0])
         choices = np.argmax(pred_hands, axis=1)
         one_hot = np.zeros_like(pred_hands)
         one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
@@ -225,7 +226,7 @@ class QLearningAgent:
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
                 self.q_scheduler.step(train_avg_loss)
-            t.set_description(f"Training Q-Network, epoch {epoch}, loss {round(train_avg_loss.item(), 5)}, lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            t.set_description(f"Training Q-Network epoch {epoch} loss {round(train_avg_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
         test_memory = self.memory[-3:]
@@ -267,7 +268,7 @@ class QLearningAgent:
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
                 self.hand_scheduler.step(test_loss / 3)
-            t.set_description(f"Training Hand Predictor, epoch {epoch}, train loss {round(train_avg_loss.item(), 5)}, train acc {round(sum(accuracies)/len(accuracies), 2)}, test acc {round(test_accuracy, 2)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(train_avg_loss.item(), 5)} train acc {round(sum(accuracies)/len(accuracies), 2)} test acc {round(test_accuracy, 2)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
         self.stacked_memory = self.unpack_memory([x for xs in memory for x in xs])
