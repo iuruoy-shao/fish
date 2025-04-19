@@ -12,7 +12,7 @@ from tqdm import tqdm
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, batch_first=True)
+        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, 2, batch_first=True, dropout=0.5)
         self.dropout = nn.Dropout(0.5)
         self.fc = nn.Linear(128, 8*54)
         
@@ -71,7 +71,7 @@ class QLearningAgent:
         self.hand_predictor = HandPrediction().to(self.device)
         self.hand_optimizer = torch.optim.Adam(self.hand_predictor.parameters(), lr=0.001)
         self.hand_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.hand_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
+            self.hand_optimizer, mode='min', factor=0.8, patience=10, min_lr=1e-6
         )
 
         self.q_network = QNetwork().to(self.device)
@@ -226,7 +226,7 @@ class QLearningAgent:
             
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
-                self.q_scheduler.step(train_avg_loss)
+                self.q_scheduler.step(train_avg_loss.item())  # Fix: Use .item() to get a Python float
             t.set_description(f"Training Q-Network epoch {epoch} loss {round(train_avg_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
@@ -268,8 +268,8 @@ class QLearningAgent:
             
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
-                self.hand_scheduler.step(test_loss / 3)
-            t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(train_avg_loss.item(), 5)} train acc {round(sum(accuracies)/len(accuracies), 2)} test acc {round(test_accuracy, 2)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+                self.hand_scheduler.step((test_loss / 3).item())  # Fix: Use .item() to get a Python float
+            t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(train_avg_loss.item(), 5)} test loss {round((test_loss / 3).item(), 5)} train acc {round(sum(accuracies)/len(accuracies), 2)} test acc {round(test_accuracy, 2)} lr {self.hand_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
         self.stacked_memory = self.unpack_memory([x for xs in memory for x in xs])
