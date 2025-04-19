@@ -200,7 +200,7 @@ class QLearningAgent:
         for episode in batch:
             pred_hands = self.hand_predictor(self.tensor(episode['state']), episode['action_masks']['hands'])
             accuracies += self.accuracy(pred_hands, episode).tolist()
-            batch_loss += self.cross_entropy_loss(pred_hands, self.tensor(episode['hands']))
+            batch_loss += self.cross_entropy_loss(pred_hands[:,1:], self.tensor(episode['hands'])[:,1:])
         return batch_loss / len(batch), sum(accuracies) / len(accuracies)
     
     def train_q_network(self, n_epochs, lr_schedule=True):
