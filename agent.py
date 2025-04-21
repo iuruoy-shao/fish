@@ -374,15 +374,17 @@ class QLearningAgent:
         return pred_hands, result
     
     def save_model(self, path='model.pth', q_network=True, hand_predictor=True):
-        torch.save({**({
-            'q_network_state_dict': self.q_network.state_dict(),
-            'q_optimizer_state_dict': self.q_optimizer.state_dict(),
-            'q_scheduler_state_dict': self.q_scheduler.state_dict() if hasattr(self, 'q_scheduler') else None,
-        } if q_network else {}), **({
-            'hand_scheduler_state_dict': self.hand_scheduler.state_dict() if hasattr(self, 'hand_scheduler') else None,
-            'hand_predictor_state_dict': self.hand_predictor.state_dict(),
-            'hand_optimizer_state_dict': self.hand_optimizer.state_dict(),
-        } if hand_predictor else {})}, path)
+        torch.save(({
+                'q_network_state_dict': self.q_network.state_dict(),
+                'q_optimizer_state_dict': self.q_optimizer.state_dict(),
+                'q_scheduler_state_dict': (self.q_scheduler.state_dict()
+                                        if hasattr(self, 'q_scheduler') else None),
+            } if q_network else {}) | ({
+                'hand_scheduler_state_dict': (self.hand_scheduler.state_dict()
+                                              if hasattr(self, 'hand_scheduler') else None),
+                'hand_predictor_state_dict': self.hand_predictor.state_dict(),
+                'hand_optimizer_state_dict': self.hand_optimizer.state_dict(),
+            } if hand_predictor else {}), path,)
         print(f"Model saved to {path}")
         
     def load_model(self, path='model.pth'):
