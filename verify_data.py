@@ -308,8 +308,11 @@ class SimulatedFishGame(FishGame):
             self.init_hands[initials] = set(cards[i*hand_length:(i+1)*hand_length])
 
     def random_pass(self):
-        valid_teammates = [teammate for teammate in self.teammates(self.turn) if self.hands[-1][teammate]]
-        if valid_teammates:
+        if valid_teammates := [
+            teammate
+            for teammate in self.teammates(self.turn)
+            if self.hands[-1][teammate]
+        ]:
             self.turn = random.choice(valid_teammates)
 
     def players_with_cards(self):
@@ -318,8 +321,7 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        monopoly = self.monopolized_set(new_hands)
-        if monopoly:
+        if monopoly := self.monopolized_set(new_hands):
             move = self.handle_call(None, new_hands, player, force_call=monopoly)
         else:
             is_call = action['call'][0] > action['call'][1]
@@ -368,8 +370,7 @@ class SimulatedFishGame(FishGame):
         card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
         if not success and random.random() < self.help_threshold:
-            helped_card = self.pick_successful_card(player, ask_person, new_hands, card)
-            if helped_card:
+            if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):
                 card = helped_card
                 success = True
             print(f"helping ask... {card}")

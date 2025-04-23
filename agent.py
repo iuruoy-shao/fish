@@ -8,12 +8,13 @@ import random
 import os
 import pickle
 from tqdm import tqdm
+import itertools
 import time
 
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, 2, batch_first=True, dropout=0.5)
+        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, batch_first=True)
         self.dropout = nn.Dropout(0.5)
         self.fc = nn.Linear(128, 8*54)
         
@@ -173,6 +174,8 @@ class QLearningAgent:
             return {k: self.shuffle_item(v, idx_list) for k, v in item.items()}
         elif isinstance(item, torch.Tensor):
             return item[idx_list]
+        else:
+            return [item[i] for i in idx_list]
 
     def shuffle_memory(self):
         indices = np.arange(0,len(self.memory['state']))
@@ -180,10 +183,13 @@ class QLearningAgent:
         return {key: self.shuffle_item(value, indices) for key, value in self.memory.items()}
     
     def shuffle_episodes(self):
-        random.shuffle(self.episode_indices)
-        indices = np.concatenate(self.episode_indices)
+        keys =  list(self.episode_indices.keys())
+        random.shuffle(keys)
+        self.episode_indices = {key: self.episode_indices[key] for key in keys}
+        
+        indices = np.concatenate(list(self.episode_indices.values()))
         index = 0
-        for i, episode in enumerate(self.episode_indices):
+        for i, episode in self.episode_indices.items():
             self.episode_indices[i] = np.arange(index, index + len(episode))
             index += len(episode)
         return {key: self.shuffle_item(value, indices) for key, value in self.memory.items()}
@@ -206,11 +212,11 @@ class QLearningAgent:
         i = 0
         pred_hands = []
         for episode_length in episode_lengths:
-            batch = self.pick_batch(i,i+episode_length)
+            episode = self.pick_batch(batch, (i,i+episode_length))
             i += episode_length
-            pred_hands.append(self.hand_predictor(self.tensor(batch['state']),
-                                                  batch['action_masks']['hands']))
-        pred_hands = np.concatenate(pred_hands, axis=0)
+            pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
+                                                  episode['action_masks']['hands']))
+        pred_hands = torch.concatenate(pred_hands, axis=0)
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
         batch_loss = self.cross_entropy_loss(pred_hands[:,1:], self.tensor(batch['hands'])[:,1:])
         return batch_loss, accuracy
@@ -242,25 +248,27 @@ class QLearningAgent:
             t.set_description(f"Training Q-Network epoch {epoch} loss {round(train_avg_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
-        test_episode_lengths = [episode.shape for episode in self.episode_indices[-16:].values()]
-        self.episode_indices = self.episode_indices[:-16]
+        test_episode_lengths = [episode.size for episode in list(self.episode_indices.values())[-self.hand_batch_size:]]
         end = len(self.memory['state'])
-        test_batch = self.pick_batch(end - sum(test_episode_lengths), end)
+        test_batch = self.pick_batch(self.memory, (end-sum(test_episode_lengths),end))
+        self.episode_indices = dict(itertools.islice(self.episode_indices.items(), len(self.episode_indices)-self.hand_batch_size))
+        self.memory = self.pick_batch(self.memory, (0,end-sum(test_episode_lengths)))
 
         t = tqdm(range(n_epochs), desc="Training Hand Predictor")
         for epoch in t:
             shuffled_memory = self.shuffle_episodes()
-            episode_lengths = [episode.shape for episode in self.episode_indices.values()]
+            episode_lengths = [episode.size for episode in self.episode_indices.values()]
             losses, accuracies = [], []
 
             j = 0
             for i in range(0, len(self.episode_indices), self.hand_batch_size):
-                batch_size_sum = sum(episode_lengths[i:i+self.hand_batch_size])
+                batch_lengths = episode_lengths[i:i+self.hand_batch_size]
+                batch_size_sum = sum(batch_lengths)
                 batch = self.pick_batch(shuffled_memory, (j,j+batch_size_sum))
                 j += batch_size_sum
 
                 self.hand_predictor.train()
-                loss, acc = self.handle_hand_batch(batch, episode_lengths[i:i+self.hand_batch_size])
+                loss, acc = self.handle_hand_batch(batch, batch_lengths)
                 losses.append(loss)
                 accuracies.append(acc)
 
@@ -272,19 +280,18 @@ class QLearningAgent:
             self.hand_predictor.eval()
             with torch.no_grad():
                 test_loss, test_acc = self.handle_hand_batch(test_batch, test_episode_lengths)
-
             if lr_schedule:
-                self.hand_scheduler.step((test_loss / 3).item())  # Fix: Use .item() to get a Python float
-            t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(torch.average(losses), 5)} test loss {round(test_loss.item(), 5)} train acc {round(torch.average(accuracies), 2)} test acc {round(test_acc, 2)} lr {self.hand_optimizer.param_groups[0]['lr']}", refresh=True)
+                self.hand_scheduler.step(test_loss.item())  # Fix: Use .item() to get a Python float
+            t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} train acc {round(np.average(accuracies), 2)} test acc {round(test_acc, 2)} lr {self.hand_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
         start = time.time()
-        self.episode_indices, index = {}, 0
-        # for i, episode in enumerate(memory):
-        #     self.episode_indices[i] = np.arange(index,index+len(episode))
-        #     index += len(episode)
-        self.memory = self.unpack_memory(memory)
-        print(self.memory)
+        self.memory, self.episode_indices, index = [], {}, 0
+        for i, episode in enumerate(memory):
+            self.episode_indices[i] = np.arange(index,index+len(episode))
+            self.memory.extend(episode)
+            index += len(episode)
+        self.memory = self.unpack_memory(self.memory)
         self.memory['action_masks']  = self.action_masks(*self.memory['mask_dep'].values())
         self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
         print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
