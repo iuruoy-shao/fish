@@ -10,6 +10,7 @@ import pickle
 from tqdm import tqdm
 import itertools
 import time
+import json
 
 class HandPrediction(nn.Module):
     def __init__(self):
@@ -36,8 +37,7 @@ class QNetwork(nn.Module):
         self.pick_call_cards = nn.Linear(32 + 9, 24)
         
         self.pick_person = nn.Linear(32, 4)
-        self.pick_ask_set = nn.Linear(32 + 4, 9)
-        self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
+        self.pick_ask_card = nn.Linear(32, 54)
         
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
@@ -50,16 +50,14 @@ class QNetwork(nn.Module):
         call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), dim=1)), (-1, 6, 4))
 
         ask_person = self.pick_person(x)
-        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
+        ask_card = self.pick_ask_card(torch.cat((x, ask_person), dim=1))
 
         return {
             'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
             'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
-            'ask_set': ask_set.masked_fill(~action_masks['ask_set'], -1e9),
-            'ask_card': ask_card, 
+            'ask_card': ask_card.masked_fill(~action_masks['ask_card'], -1e9),
         }
 
 class QLearningAgent:
@@ -88,7 +86,7 @@ class QLearningAgent:
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
         self.hand_batch_size = 3
-        self.q_batch_size = 128
+        self.q_batch_size = 256
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -156,7 +154,7 @@ class QLearningAgent:
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
-            'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
+            'ask_card': self.tensor(np.repeat(np.sum(hand, axis=2) > 0, 6), as_bool=True)  # the sets that the player holds
         }
     
     def unpack_memory(self, batch):
@@ -222,6 +220,9 @@ class QLearningAgent:
         return batch_loss, accuracy
     
     def train_q_network(self, n_epochs, lr_schedule=True):
+        test_batch = self.pick_batch(self.memory, (len(self.memory['state'])-self.q_batch_size, len(self.memory['state'])))
+        self.memory = self.pick_batch(self.memory, (0, len(self.memory['state'])-self.q_batch_size))
+        
         t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
             shuffled_memory = self.shuffle_memory()
@@ -242,10 +243,14 @@ class QLearningAgent:
                 torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
                 self.q_optimizer.step()
             
+            self.hand_predictor.eval()
+            with torch.no_grad():
+                test_loss = self.handle_q_batch(test_batch)
+            
             train_avg_loss = total_loss / batch_count
             if lr_schedule:
-                self.q_scheduler.step(train_avg_loss.item())  # Fix: Use .item() to get a Python float
-            t.set_description(f"Training Q-Network epoch {epoch} loss {round(train_avg_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+                self.q_scheduler.step(test_loss.item())  # Fix: Use .item() to get a Python float
+            t.set_description(f"Training Q-Network epoch {epoch} train loss {round(train_avg_loss.item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
         test_episode_lengths = [episode.size for episode in list(self.episode_indices.values())[-self.hand_batch_size:]]
@@ -327,22 +332,28 @@ class QLearningAgent:
                 self.save_model(path)
 
     def simulate_game(self):
-        game = SimulatedFishGame(random.choice([6,8]))
+        game = SimulatedFishGame(8)
         no_call_count = 0
+        debugging = []
         while not game.ended():
             acted = False
             actions = {}
+            saved = {}
             for player in game.players_with_cards():
                 game.rotate(player)
-                state = self.tensor(np.stack([game.get_state(len(game.hands)-1, player, game.to_state())]))
+                state = self.tensor(np.stack([game.get_state(i, game.to_state()) for i in range(len(game.hands))]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 pred_hands, action = self.act(state, mask)
-                print(game.datarows[-2], game.decode_all_hands(pred_hands.cpu().detach().numpy()))
-                # print(f"hand pred acc: {round(self.accuracy(pred_hands, {'mask': mask, 'hands': game.encode_all_hands(len(game.hands)-1), 'mask_dep': self.unpack_memory([game.mask_dep(len(game.hands)-1, player)])})[0], 2)}")
+                saved[player] = {
+                    'state': str(state),
+                    'pred': game.decode_all_hands(pred_hands.cpu().detach().numpy())
+                }
                 actions[player] = action
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
                     acted = True
+            saved['event'] = game.datarows[-2]
+            debugging.append(saved)
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
                     game.parse_action(actions[game.turn], game.turn)
@@ -358,11 +369,13 @@ class QLearningAgent:
                     game.parse_action(actions[calling_player], calling_player)
                     no_call_count = 0
 
+        with open("sample_simulation_debug.json", "w") as f:
+            json.dump(debugging, f, indent=4)
         with open("sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
         for player in game.players: # TODO: multithread this for cuda
-            for _ in range(10):
+            for _ in range(50):
                 game.shuffle()
                 memories.append(game.memory(player))
         return game, memories
@@ -371,7 +384,7 @@ class QLearningAgent:
         self.q_network.eval()
         self.hand_predictor.eval()
         with torch.no_grad():
-            pred_hands = self.hand_predictor(state, mask['hands'])
+            pred_hands = self.hand_predictor(state, mask['hands'])[-1]
             q_vals = self.q_network(pred_hands, mask)
         result = {}
         for key in q_vals.keys():
@@ -406,14 +419,16 @@ class QLearningAgent:
         checkpoint = torch.load(path, map_location=self.device)
         
         if 'hand_predictor_state_dict' in checkpoint:
+            print('loading hand predictor')
             self.hand_predictor.load_state_dict(checkpoint['hand_predictor_state_dict'])
             self.hand_optimizer.load_state_dict(checkpoint['hand_optimizer_state_dict'])
             if checkpoint['hand_scheduler_state_dict'] is not None and hasattr(self, 'hand_scheduler'):
                 self.hand_scheduler.load_state_dict(checkpoint['hand_scheduler_state_dict'])
-        if 'q_network_state_dict' in checkpoint:
-            self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
-            self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
-            if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
-                self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
+        # if 'q_network_state_dict' in checkpoint:
+        #     print('loading q vals')
+        #     self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
+        #     self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
+        #     if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
+        #         self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
         
         return True
