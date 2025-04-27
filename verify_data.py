@@ -5,7 +5,7 @@ import random
 
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 CALL_LEN = 42
-ASK_LEN = 32
+ASK_LEN = 71
 
 rewards = {
     'correct_call': 1,
@@ -34,6 +34,7 @@ with open('sets.json','r') as f:
         vector[np.where(sets_array == card)[0][0]] = 1
         vector[np.where(sets_array == card)[1][0] + 9] = 1
         card_to_vector[str(card)] = vector
+    all_cards = list(card_to_vector.keys())
 
 class ParseError(Exception):
     pass
@@ -52,6 +53,7 @@ class FishGame:
         global sets_array
         global card_to_vector
         global sets
+        global all_cards
         np.random.shuffle(sets_array) # shuffle rows
         np.apply_along_axis(np.random.shuffle, 1, sets_array) # shuffle within row
         sets = sets_array.tolist()
@@ -61,6 +63,7 @@ class FishGame:
             vector[np.where(sets_array == card)[0][0]] = 1
             vector[np.where(sets_array == card)[1][0] + 9] = 1
             card_to_vector[str(card)] = vector
+        all_cards = list(card_to_vector.keys())
         team0 = self.players[::2]
         team1 = self.players[1::2]
         random.shuffle(team0)
@@ -181,9 +184,12 @@ class FishGame:
              else rewards['incorrect_team_ask'] if same_team
              else rewards['incorrect_opponent_ask'])
         )
+        card_vector = np.zeros(54, dtype=int)
+        card_vector[all_cards.index(card)] = 1
+        
         return np.concatenate((self.encode_player(asking_p),
                                self.encode_player(asked_p),
-                               card_to_vector[card],
+                               card_vector,
                                np.array([status])))
         
     def to_state(self):
@@ -207,9 +213,11 @@ class FishGame:
                         + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
     def decode_all_hands(self, hands): # shape, 8 x 54
-        card_assignments = {player:set() for player in self.players}
+        card_assignments = {player:[] for player in self.players}
+        exclude = np.where(np.all(hands.T==0, axis=1))[0]
         for i, index in enumerate(np.argmax(hands.T, axis=1).reshape(-1)):
-            card_assignments[self.players[index]].add(list(card_to_vector.keys())[i])
+            if i not in exclude:
+                card_assignments[self.players[index]].append(all_cards[i])
         return card_assignments
                 
     def get_state(self, i, ordered_state):
@@ -241,8 +249,7 @@ class FishGame:
                 'call_set': state[i][8:8+9] if is_call(i) else None,
                 'call_cards': state[i][8+9:8+9+24].reshape((6,4)) if is_call(i) else None,
                 'ask_person': state[i][CALL_LEN+8:CALL_LEN+8+8][1::2] if is_ask(i) else None, 
-                'ask_set': state[i][CALL_LEN+8+8:CALL_LEN+8+8+9] if is_ask(i) else None,
-                'ask_card': state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6] if is_ask(i) else None,
+                'ask_set': state[i][CALL_LEN+8+8+54:] if is_ask(i) else None,
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)

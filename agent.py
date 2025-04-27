@@ -87,7 +87,7 @@ class QLearningAgent:
 
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
-        self.hand_batch_size = 16
+        self.hand_batch_size = 3
         self.q_batch_size = 128
 
     def tensor(self, x, as_bool=False):
