@@ -384,7 +384,7 @@ class SimulatedFishGame(FishGame):
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):
                 card = helped_card
                 success = True
-            print(f"helping ask... {card}")
+                print(f"helping ask... {card}")
         if success:
             new_hands[ask_person].remove(card)
             new_hands[player].add(card)

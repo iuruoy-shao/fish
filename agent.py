@@ -83,7 +83,7 @@ class QLearningAgent:
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
-        self.epsilon = 0.10   # exploration rate
+        self.epsilon = 0.01   # exploration rate
         self.hand_batch_size = 3
         self.q_batch_size = 1024
 
