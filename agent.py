@@ -37,7 +37,7 @@ class QNetwork(nn.Module):
         self.pick_call_cards = nn.Linear(32 + 9, 24)
         
         self.pick_person = nn.Linear(32, 4)
-        self.pick_ask_card = nn.Linear(32, 54)
+        self.pick_ask_card = nn.Linear(32 + 4, 54)
         
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
@@ -94,7 +94,7 @@ class QLearningAgent:
         return torch.FloatTensor(np.array(x)).to(self.device)
 
     def max_q(self, action, i):
-        if all(action['ask_set'][i] < -9e8):
+        if all(action['ask_card'][i] < -9e8):
             return torch.tensor(0).to(self.device)
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
@@ -154,7 +154,7 @@ class QLearningAgent:
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
-            'ask_card': self.tensor(np.repeat(np.sum(hand, axis=2) > 0, 6), as_bool=True)  # the sets that the player holds
+            'ask_card': self.tensor(np.repeat(np.sum(hand, axis=2) > 0, 6, axis=1), as_bool=True)  # the sets that the player holds
         }
     
     def unpack_memory(self, batch):
@@ -424,11 +424,11 @@ class QLearningAgent:
             self.hand_optimizer.load_state_dict(checkpoint['hand_optimizer_state_dict'])
             if checkpoint['hand_scheduler_state_dict'] is not None and hasattr(self, 'hand_scheduler'):
                 self.hand_scheduler.load_state_dict(checkpoint['hand_scheduler_state_dict'])
-        # if 'q_network_state_dict' in checkpoint:
-        #     print('loading q vals')
-        #     self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
-        #     self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
-        #     if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
-        #         self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
+        if 'q_network_state_dict' in checkpoint:
+            print('loading q vals')
+            self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
+            self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
+            if checkpoint['q_scheduler_state_dict'] is not None and hasattr(self, 'q_scheduler'):
+                self.q_scheduler.load_state_dict(checkpoint['q_scheduler_state_dict'])
         
         return True
