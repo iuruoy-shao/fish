@@ -208,7 +208,10 @@ class FishGame:
             hand_vector[np.where(sets_array == card)[0][0]][np.where(sets_array == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
-    def encode_all_hands(self, i):
+    def encode_all_hands(self, i, predicted=False, player=None):
+        if predicted:
+            return np.stack([self.encode_hand(self.all_pred_hands[i][player][p]) for p in self.players] 
+                            + [self.encode_hand({})] * (8-len(self.players)), axis=0)
         return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] 
                         + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
@@ -235,15 +238,16 @@ class FishGame:
 
     def memory(self, player):
         self.rotate(player)
-        state = self.to_state() # get state with order shifting
+        state = self.to_state()
         
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         return [{
             'state': self.get_state(i, state),
             'hands': self.encode_all_hands(i),
+            'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
             'next_hands': self.encode_all_hands(i+1),
-            'reward': np.array(self.rewards[i]).reshape(-1), # invert if player on odd team
+            'reward': np.array(self.rewards[i]).reshape(-1),
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
                 'call_set': state[i][8:8+9] if is_call(i) else None,
@@ -374,7 +378,7 @@ class SimulatedFishGame(FishGame):
 
     def handle_ask(self, action, new_hands, player):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
-        card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
+        card = all_cards[np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
         if not success and random.random() < self.help_threshold:
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):

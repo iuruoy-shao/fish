@@ -5,12 +5,11 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 import numpy as np
 import random
-import os
 import pickle
 from tqdm import tqdm
 import itertools
 import time
-import json
+import os
 
 class HandPrediction(nn.Module):
     def __init__(self):
@@ -86,7 +85,7 @@ class QLearningAgent:
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.10   # exploration rate
         self.hand_batch_size = 3
-        self.q_batch_size = 256
+        self.q_batch_size = 1024
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -202,7 +201,7 @@ class QLearningAgent:
         }
     
     def handle_q_batch(self, batch):
-        current_q = self.q_network(self.tensor(batch['hands']), batch['action_masks'])
+        current_q = self.q_network(self.tensor(batch['predicted_hands']), batch['action_masks'])
         next_q = self.q_network(self.tensor(batch['next_hands']), batch['next_action_masks'])
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
@@ -226,31 +225,26 @@ class QLearningAgent:
         t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
             shuffled_memory = self.shuffle_memory()
-            total_loss = 0
-            batch_count = 0
+            losses = []
 
             self.q_network.train()
             for i in range(0, len(shuffled_memory['state']), self.q_batch_size):
-                if i + self.q_batch_size > len(shuffled_memory['state']):
-                    continue
                 batch = self.pick_batch(shuffled_memory, (i,i+self.q_batch_size))
                 loss = self.handle_q_batch(batch)
-                total_loss += loss
-                batch_count += 1
+                losses.append(loss)
 
                 self.q_optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=1.0)
                 self.q_optimizer.step()
             
-            self.hand_predictor.eval()
+            self.q_network.eval()
             with torch.no_grad():
                 test_loss = self.handle_q_batch(test_batch)
             
-            train_avg_loss = total_loss / batch_count
             if lr_schedule:
                 self.q_scheduler.step(test_loss.item())  # Fix: Use .item() to get a Python float
-            t.set_description(f"Training Q-Network epoch {epoch} train loss {round(train_avg_loss.item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            t.set_description(f"Training Q-Network epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
         test_episode_lengths = [episode.size for episode in list(self.episode_indices.values())[-self.hand_batch_size:]]
@@ -334,7 +328,7 @@ class QLearningAgent:
     def simulate_game(self):
         game = SimulatedFishGame(8)
         no_call_count = 0
-        debugging = []
+        game.all_pred_hands = []
         while not game.ended():
             acted = False
             actions = {}
@@ -344,16 +338,12 @@ class QLearningAgent:
                 state = self.tensor(np.stack([game.get_state(i, game.to_state()) for i in range(len(game.hands))]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 pred_hands, action = self.act(state, mask)
-                saved[player] = {
-                    'state': str(state),
-                    'pred': game.decode_all_hands(pred_hands.cpu().detach().numpy())
-                }
+                saved[player] = game.decode_all_hands(pred_hands.cpu().detach().numpy())
                 actions[player] = action
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
                     acted = True
-            saved['event'] = game.datarows[-2]
-            debugging.append(saved)
+            game.all_pred_hands.append(saved)
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
                     game.parse_action(actions[game.turn], game.turn)
@@ -369,12 +359,10 @@ class QLearningAgent:
                     game.parse_action(actions[calling_player], calling_player)
                     no_call_count = 0
 
-        with open("sample_simulation_debug.json", "w") as f:
-            json.dump(debugging, f, indent=4)
         with open("sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
-        for player in game.players: # TODO: multithread this for cuda
+        for player in game.players:
             for _ in range(50):
                 game.shuffle()
                 memories.append(game.memory(player))
