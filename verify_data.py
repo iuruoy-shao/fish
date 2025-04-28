@@ -246,7 +246,7 @@ class FishGame:
             'state': self.get_state(i, state),
             'hands': self.encode_all_hands(i),
             'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
-            'next_hands': self.encode_all_hands(i+1),
+            'next_predicted_hands': self.encode_all_hands(i+1, predicted=True, player=player) if i+1 < self.last_hand_index(player) else np.zeros((8, 54), dtype=int),
             'reward': np.array(self.rewards[i]).reshape(-1),
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),

@@ -202,7 +202,7 @@ class QLearningAgent:
     
     def handle_q_batch(self, batch):
         current_q = self.q_network(self.tensor(batch['predicted_hands']), batch['action_masks'])
-        next_q = self.q_network(self.tensor(batch['next_hands']), batch['next_action_masks'])
+        next_q = self.q_network(self.tensor(batch['next_predicted_hands']), batch['next_action_masks'])
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def handle_hand_batch(self, batch, episode_lengths):
@@ -243,7 +243,7 @@ class QLearningAgent:
                 test_loss = self.handle_q_batch(test_batch)
             
             if lr_schedule:
-                self.q_scheduler.step(test_loss.item())  # Fix: Use .item() to get a Python float
+                self.q_scheduler.step(test_loss.item())
             t.set_description(f"Training Q-Network epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
