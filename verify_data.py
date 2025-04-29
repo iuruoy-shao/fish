@@ -5,7 +5,7 @@ import random
 
 agent_initials = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8']
 CALL_LEN = 42
-ASK_LEN = 71
+ASK_LEN = 32
 
 rewards = {
     'correct_call': 1,
@@ -14,8 +14,8 @@ rewards = {
     'incorrect_team_call': 0,
     'correct_opponent_call': 0,
     'incorrect_opponent_call': 0,
-    'correct_ask': 0,
-    'incorrect_ask': 0,
+    'correct_ask': .1,
+    'incorrect_ask': -.1,
     'correct_team_ask': 0,
     'incorrect_team_ask': 0,
     'correct_opponent_ask': 0,
@@ -46,8 +46,10 @@ class FishGame:
                            for player in self.datarows[0].split()}
         self.players = list(self.init_hands.keys())
         self.score = [0, 0]
+        self.last_indices = {}
         self.rewards = [] # encodes for even team, reverse for odd team
         self.verify()
+        self.all_pred_hands = []
 
     def shuffle(self):
         global sets_array
@@ -184,12 +186,10 @@ class FishGame:
              else rewards['incorrect_team_ask'] if same_team
              else rewards['incorrect_opponent_ask'])
         )
-        card_vector = np.zeros(54, dtype=int)
-        card_vector[all_cards.index(card)] = 1
         
         return np.concatenate((self.encode_player(asking_p),
                                self.encode_player(asked_p),
-                               card_vector,
+                               card_to_vector[card],
                                np.array([status])))
         
     def to_state(self):
@@ -232,9 +232,13 @@ class FishGame:
         self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)]
     
     def last_hand_index(self, player):
-        for i, hand in enumerate(self.hands[::-1]):
-            if len(hand[player]):
-                return len(self.hands)-i
+        if not self.last_indices:
+            for player in self.players:
+                for i, hand in enumerate(self.hands[::-1]):
+                    if len(hand[player]):
+                        self.last_indices[player] = len(self.hands)-i
+                        break
+        return self.last_indices[player]
 
     def memory(self, player):
         self.rotate(player)
@@ -242,22 +246,27 @@ class FishGame:
         
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
+        last = self.last_hand_index(player)
         return [{
             'state': self.get_state(i, state),
             'hands': self.encode_all_hands(i),
-            'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
-            'next_predicted_hands': self.encode_all_hands(i+1, predicted=True, player=player) if i+1 < self.last_hand_index(player) else np.zeros((8, 54), dtype=int),
+            **({
+                'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
+                'next_predicted_hands': self.encode_all_hands(i+1, predicted=True, player=player) 
+                                        if i+1 < last 
+                                        else np.zeros((8, 54), dtype=int)
+                } if self.all_pred_hands else {}),
             'reward': np.array(self.rewards[i]).reshape(-1),
             'action': {
                 'call': np.array([1,0] if is_call(i) else [0,1]),
                 'call_set': state[i][8:8+9] if is_call(i) else None,
                 'call_cards': state[i][8+9:8+9+24].reshape((6,4)) if is_call(i) else None,
                 'ask_person': state[i][CALL_LEN+8:CALL_LEN+8+8][1::2] if is_ask(i) else None, 
-                'ask_card': state[i][CALL_LEN+8+8:CALL_LEN+8+8+54] if is_ask(i) else None,
+                'ask_card': state[i][CALL_LEN+8+8:CALL_LEN+8+8+15] if is_ask(i) else None,
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in range(self.last_hand_index(player))]
+        } for i in range(last)]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
@@ -301,6 +310,7 @@ class SimulatedFishGame(FishGame):
         self.assign_hands()
         self.hands = [self.init_hands]
         self.rewards = []
+        self.last_indices = {}
         self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" 
                          for player in self.players])}\n', 'temp_score']
         self.turn = random.choice(self.players)
