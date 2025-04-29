@@ -27,36 +27,39 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.fc4 = nn.Linear(8*54, 128)
-        self.fc5 = nn.Linear(128, 64)
-        self.fc6 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(8*54, 256)
+        self.fc5 = nn.Linear(256, 128)
         
-        self.to_call = nn.Linear(32, 2)
-        self.pick_call_set = nn.Linear(32, 9)
-        self.pick_call_cards = nn.Linear(32 + 9, 24)
+        self.to_call = nn.Linear(128, 2)
+        self.pick_call_set = nn.Linear(128, 9)
+        self.pick_call_cards = nn.Linear(128 + 9, 24)
         
-        self.pick_person = nn.Linear(32, 4)
-        self.pick_ask_card = nn.Linear(32 + 4, 54)
+        self.pick_person = nn.Linear(128, 4)
+        self.pick_ask_set = nn.Linear(128 + 4, 9)
+        self.pick_ask_card = nn.Linear(128 + 4 + 9, 6)
+        
+        self.dropout = nn.Dropout(0.5)
         
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
+        x = self.dropout(F.relu(self.fc4(x)))
+        x = self.dropout(F.relu(self.fc5(x)))
 
         to_call = self.to_call(x)
         call_set = self.pick_call_set(x)
         call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), dim=1)), (-1, 6, 4))
 
         ask_person = self.pick_person(x)
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person), dim=1))
+        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
+        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
 
         return {
             'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
             'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
-            'ask_card': ask_card.masked_fill(~action_masks['ask_card'], -1e9),
+            'ask_set': ask_set.masked_fill(~action_masks['ask_set'], -1e9),
+            'ask_card': ask_card
         }
 
 class QLearningAgent:
@@ -93,7 +96,7 @@ class QLearningAgent:
         return torch.FloatTensor(np.array(x)).to(self.device)
 
     def max_q(self, action, i):
-        if all(action['ask_card'][i] < -9e8):
+        if all(action['ask_set'][i] < -9e8):
             return torch.tensor(0).to(self.device)
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
@@ -133,7 +136,7 @@ class QLearningAgent:
                          self.target_q(torch.stack(next_qs), self.tensor(rewards)))
     
     def accuracy(self, pred_hands, episode):
-        pred_hands = pred_hands.cpu().detach().numpy()
+        pred_hands = torch.concat(pred_hands).cpu().detach().numpy()
         choices = np.argmax(pred_hands, axis=1)
         one_hot = np.zeros_like(pred_hands)
         one_hot[np.arange(pred_hands.shape[0])[:,None], choices, np.arange(54)[None,:]] = 1
@@ -153,7 +156,7 @@ class QLearningAgent:
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
             'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
-            'ask_card': self.tensor(np.repeat(np.sum(hand, axis=2) > 0, 6, axis=1), as_bool=True)  # the sets that the player holds
+            'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
         }
     
     def unpack_memory(self, batch):
@@ -206,6 +209,7 @@ class QLearningAgent:
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def handle_hand_batch(self, batch, episode_lengths):
+        reshape = lambda x: torch.reshape(torch.swapaxes(x[:,1:],1,2), (-1,7))
         i = 0
         pred_hands = []
         for episode_length in episode_lengths:
@@ -213,9 +217,9 @@ class QLearningAgent:
             i += episode_length
             pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
                                                   episode['action_masks']['hands']))
-        pred_hands = torch.concatenate(pred_hands, axis=0)
+        stacked_pred_hands = reshape(torch.concat(pred_hands))
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
-        batch_loss = self.cross_entropy_loss(pred_hands[:,1:], self.tensor(batch['hands'])[:,1:])
+        batch_loss = self.cross_entropy_loss(stacked_pred_hands, reshape(self.tensor(batch['hands'])))
         return batch_loss, accuracy
     
     def train_q_network(self, n_epochs, lr_schedule=True):
@@ -320,8 +324,8 @@ class QLearningAgent:
                 self.train_on_data(memories_batch, q_epochs, hand_epochs, lr_schedule=False)
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i:
-                if len(memories) > 50: # sampling
-                    self.train_on_data(random.sample(memories, 50), q_epochs*3, hand_epochs*3, lr_schedule=False)
+                if len(memories) > 300: # sampling
+                    self.train_on_data(random.sample(memories, 300), q_epochs*3, hand_epochs*3, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
 
@@ -346,6 +350,7 @@ class QLearningAgent:
             game.all_pred_hands.append(saved)
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
+                    print(saved[game.turn])
                     game.parse_action(actions[game.turn], game.turn)
                 elif no_call_count < 3:
                     no_call_count += 1
@@ -363,7 +368,7 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         for player in game.players:
-            for _ in range(50):
+            for _ in range(10):
                 game.shuffle()
                 memories.append(game.memory(player))
         return game, memories

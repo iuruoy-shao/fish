@@ -26,6 +26,7 @@ with open('sets.json','r') as f:
     global sets_array
     global sets
     global card_to_vector
+    global all_cards
     sets = json.load(f)
     sets_array = np.array(sets)
     card_to_vector = {}
@@ -80,6 +81,21 @@ class FishGame:
     
     def set_index(self, card):
        return np.where(sets_array == card)[0][0]
+    
+    def card_index(self, card):
+        return np.where(sets_array == card)[1][0]
+
+    def vector_to_card(self, card_vector):
+        set_index = np.argmax(card_vector[:9])
+        card_index = np.argmax(card_vector[9:])
+        return sets_array[set_index][card_index]
+
+    def flatten_card_vector(self, card_vector):
+        set_index = np.argmax(card_vector[:9])
+        card_index = np.argmax(card_vector[9:])
+        vector = np.zeros(54, dtype=int)
+        vector[set_index*6 + card_index] = 1
+        return vector
 
     def parse_call(self, line):
         return {
@@ -262,7 +278,8 @@ class FishGame:
                 'call_set': state[i][8:8+9] if is_call(i) else None,
                 'call_cards': state[i][8+9:8+9+24].reshape((6,4)) if is_call(i) else None,
                 'ask_person': state[i][CALL_LEN+8:CALL_LEN+8+8][1::2] if is_ask(i) else None, 
-                'ask_card': state[i][CALL_LEN+8+8:CALL_LEN+8+8+15] if is_ask(i) else None,
+                'ask_set': state[i][CALL_LEN+8+8:CALL_LEN+8+8+9] if is_ask(i) else None,
+                'ask_card': state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6] if is_ask(i) else None,
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
@@ -388,7 +405,7 @@ class SimulatedFishGame(FishGame):
 
     def handle_ask(self, action, new_hands, player):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
-        card = all_cards[np.argmax(action['ask_card'])]
+        card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
         if not success and random.random() < self.help_threshold:
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):
