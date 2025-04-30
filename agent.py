@@ -203,9 +203,9 @@ class QLearningAgent:
             for key in memory.keys()
         }
     
-    def handle_q_batch(self, batch):
-        current_q = self.q_network(self.tensor(batch['predicted_hands']), batch['action_masks'])
-        next_q = self.q_network(self.tensor(batch['next_predicted_hands']), batch['next_action_masks'])
+    def handle_q_batch(self, batch, pred_hands=True):
+        current_q = self.q_network(self.tensor(batch['predicted_hands' if pred_hands else 'hands']), batch['action_masks'])
+        next_q = self.q_network(self.tensor(batch['next_predicted_hands' if pred_hands else 'next_hands']), batch['next_action_masks'])
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
     def handle_hand_batch(self, batch, episode_lengths):
@@ -223,6 +223,7 @@ class QLearningAgent:
         return batch_loss, accuracy
     
     def train_q_network(self, n_epochs, lr_schedule=True):
+        pred_hands = 'predicted_hands' in self.memory
         test_batch = self.pick_batch(self.memory, (len(self.memory['state'])-self.q_batch_size, len(self.memory['state'])))
         self.memory = self.pick_batch(self.memory, (0, len(self.memory['state'])-self.q_batch_size))
         
@@ -234,7 +235,7 @@ class QLearningAgent:
             self.q_network.train()
             for i in range(0, len(shuffled_memory['state']), self.q_batch_size):
                 batch = self.pick_batch(shuffled_memory, (i,i+self.q_batch_size))
-                loss = self.handle_q_batch(batch)
+                loss = self.handle_q_batch(batch, pred_hands)
                 losses.append(loss)
 
                 self.q_optimizer.zero_grad()
@@ -244,7 +245,7 @@ class QLearningAgent:
             
             self.q_network.eval()
             with torch.no_grad():
-                test_loss = self.handle_q_batch(test_batch)
+                test_loss = self.handle_q_batch(test_batch, pred_hands)
             
             if lr_schedule:
                 self.q_scheduler.step(test_loss.item())
@@ -325,12 +326,13 @@ class QLearningAgent:
                 memories_batch = []
             if i % (update_rate * 3) == 0 and i:
                 if len(memories) > 300: # sampling
-                    self.train_on_data(random.sample(memories, 300), q_epochs*3, hand_epochs*3, lr_schedule=False)
+                    memories = random.sample(memories, 300) # shrink
+                    self.train_on_data(memories, q_epochs*3, hand_epochs*3, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
 
     def simulate_game(self):
-        game = SimulatedFishGame(8)
+        game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
         game.all_pred_hands = []
         while not game.ended():
@@ -369,7 +371,7 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         for player in game.players:
-            for _ in range(10):
+            for _ in range(25):
                 game.shuffle()
                 memories.append(game.memory(player))
         return game, memories
@@ -406,19 +408,19 @@ class QLearningAgent:
             } if hand_predictor else {}), path,)
         print(f"Model saved to {path}")
         
-    def load_model(self, path='model.pth'):
+    def load_model(self, path='model.pth', q_network=True, hand_predictor=True):
         if not os.path.exists(path):
             return False
             
         checkpoint = torch.load(path, map_location=self.device)
         
-        if 'hand_predictor_state_dict' in checkpoint:
+        if hand_predictor and 'hand_predictor_state_dict' in checkpoint:
             print('loading hand predictor')
             self.hand_predictor.load_state_dict(checkpoint['hand_predictor_state_dict'])
             self.hand_optimizer.load_state_dict(checkpoint['hand_optimizer_state_dict'])
             if checkpoint['hand_scheduler_state_dict'] is not None and hasattr(self, 'hand_scheduler'):
                 self.hand_scheduler.load_state_dict(checkpoint['hand_scheduler_state_dict'])
-        if 'q_network_state_dict' in checkpoint:
+        if q_network and 'q_network_state_dict' in checkpoint:
             print('loading q vals')
             self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
             self.q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])

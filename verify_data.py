@@ -14,8 +14,8 @@ rewards = {
     'incorrect_team_call': 0,
     'correct_opponent_call': 0,
     'incorrect_opponent_call': 0,
-    'correct_ask': .1,
-    'incorrect_ask': -.1,
+    'correct_ask': 0,
+    'incorrect_ask': 0,
     'correct_team_ask': 0,
     'incorrect_team_ask': 0,
     'correct_opponent_ask': 0,
@@ -259,13 +259,15 @@ class FishGame:
     def memory(self, player):
         self.rotate(player)
         state = self.to_state()
-        
+        hand_encodings = [self.encode_all_hands(i) for i in range(len(state))]
+
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         last = self.last_hand_index(player)
         return [{
             'state': self.get_state(i, state),
-            'hands': self.encode_all_hands(i),
+            'hands': hand_encodings[i],
+            'next_hands': hand_encodings[i+1] if i+1 < last else np.zeros((8, 54), dtype=int),
             **({
                 'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
                 'next_predicted_hands': self.encode_all_hands(i+1, predicted=True, player=player) 
@@ -320,7 +322,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = .2
+        self.help_threshold = .5
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
@@ -368,6 +370,7 @@ class SimulatedFishGame(FishGame):
             else:
                 move = self.handle_ask(action, new_hands, player)
 
+        print(move[:-1])
         self.hands.append(new_hands)
         self.datarows.insert(-1, move)
 
