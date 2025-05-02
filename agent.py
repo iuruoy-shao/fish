@@ -27,23 +27,27 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.fc4 = nn.Linear(8*54, 256)
-        self.fc5 = nn.Linear(256, 128)
-        
-        self.to_call = nn.Linear(128, 2)
-        self.pick_call_set = nn.Linear(128, 9)
-        self.pick_call_cards = nn.Linear(128 + 9, 24)
-        
-        self.pick_person = nn.Linear(128, 4)
-        self.pick_ask_set = nn.Linear(128 + 4, 9)
-        self.pick_ask_card = nn.Linear(128 + 4 + 9, 6)
-        
+        self.conv1 = nn.Conv1d(in_channels=8, out_channels=16, kernel_size=6, stride=6) # Output: (batch, 16, 9 sets)
+        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=1) # Output: (batch, 32, 9 sets)
+        self.pool = nn.AdaptiveAvgPool1d(1) # Output: (batch, 32, 1)
+
+        self.fc1 = nn.Linear(32, 32) # Input size is num_channels from conv2
         self.dropout = nn.Dropout(0.5)
-        
+
+        self.to_call = nn.Linear(32, 2)
+        self.pick_call_set = nn.Linear(32, 9)
+        self.pick_call_cards = nn.Linear(32 + 9, 24)
+
+        self.pick_person = nn.Linear(32, 4)
+        self.pick_ask_set = nn.Linear(32 + 4, 9)
+        self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
+
     def forward(self, x, action_masks):
-        x = x.reshape(-1, 8*54)
-        x = self.dropout(F.relu(self.fc4(x)))
-        x = self.dropout(F.relu(self.fc5(x)))
+        x = x.reshape(-1, 8, 54)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = torch.flatten(self.pool(x), 1)
+        x = self.dropout(F.relu(self.fc1(x)))
 
         to_call = self.to_call(x)
         call_set = self.pick_call_set(x)
@@ -354,6 +358,7 @@ class QLearningAgent:
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
                     print(saved[game.turn])
+                    # print(game.hands[-1])
                     game.parse_action(actions[game.turn], game.turn)
                 elif no_call_count < 3:
                     no_call_count += 1
