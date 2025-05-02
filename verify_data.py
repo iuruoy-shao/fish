@@ -13,12 +13,12 @@ rewards = {
     'correct_team_call': 1,
     'incorrect_team_call': -1,
     'correct_opponent_call': -1,
-    'incorrect_opponent_call': 1,
+    'incorrect_opponent_call': 0,
     'correct_ask': .1,
     'incorrect_ask': -.1,
-    'correct_team_ask': 0,
-    'incorrect_team_ask': 0,
-    'correct_opponent_ask': 0,
+    'correct_team_ask': .1,
+    'incorrect_team_ask': -.1,
+    'correct_opponent_ask': -.1,
     'incorrect_opponent_ask': 0,
 }
 
@@ -256,16 +256,11 @@ class FishGame:
                         break
         return self.last_indices[player]
 
-    def memory(self, player, pick_last=False):
-        self.rotate(player)
-        state = self.to_state()
-        hand_encodings = [self.encode_all_hands(i) for i in range(len(state)+1)]
-
+    def memory_item(self, i, player, state, hand_encodings, last):
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
-        last = self.last_hand_index(player)
-
-        return [{
+        
+        return {
             'state': self.get_state(i, state),
             'hands': hand_encodings[i],
             'next_hands': hand_encodings[i+1] if i+1 < last else np.zeros((8, 54), dtype=int),
@@ -286,7 +281,24 @@ class FishGame:
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in ([last-3] if pick_last else range(last))]
+        }
+
+    def memory(self, player, pick_last=False, return_call_set=False):
+        self.rotate(player)
+        state = self.to_state()
+        hand_encodings = [self.encode_all_hands(i) for i in range(len(state)+1)]
+
+        is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
+        last = self.last_hand_index(player)
+
+        memory = []
+        call_memory = []
+        for i in ([last-3] if pick_last else range(last)):
+            entry = self.memory_item(i, player, state, hand_encodings, last)
+            memory.append(entry)
+            if return_call_set and is_call(i):
+                call_memory.append(entry)
+        return (memory, call_memory) if return_call_set else memory
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
