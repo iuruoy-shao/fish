@@ -303,12 +303,14 @@ class QLearningAgent:
         self.memory = self.unpack_memory(self.memory)
         self.memory['action_masks']  = self.action_masks(*self.memory['mask_dep'].values())
         self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
-        print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
+        # print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
             
     def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
         self.load_memory(memory)
-        self.train_hand_predictor(hand_epochs, lr_schedule)
-        self.train_q_network(q_epochs, lr_schedule)
+        if hand_epochs:
+            self.train_hand_predictor(hand_epochs, lr_schedule)
+        if q_epochs:
+            self.train_q_network(q_epochs, lr_schedule)
     
     def pickle_memory(self, memory, path='stored_memories.pkl'):
         with open(path, 'wb') as f:
@@ -397,12 +399,12 @@ class QLearningAgent:
         result = {}
         for key in q_vals.keys():
             row_data = q_vals[key][0].cpu().detach().numpy()
-            if random.random() < self.epsilon:
-                if key == 'call_cards':
-                    for i in range(6):
-                        row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
-                elif key != 'call':
-                    row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
+            random_n = random.random()
+            if key == 'call_cards' and random_n < self.epsilon:
+                for i in range(6):
+                    row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
+            elif (key == 'call' and random_n < self.epsilon / 10) or (key != 'call' and random_n < self.epsilon):
+                row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
             result[key] = row_data
         return pred_hands, result
     

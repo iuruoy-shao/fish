@@ -10,12 +10,12 @@ ASK_LEN = 32
 rewards = {
     'correct_call': 1,
     'incorrect_call': -1,
-    'correct_team_call': 0,
-    'incorrect_team_call': 0,
-    'correct_opponent_call': 0,
-    'incorrect_opponent_call': 0,
-    'correct_ask': .1,
-    'incorrect_ask': -.1,
+    'correct_team_call': 1,
+    'incorrect_team_call': -1,
+    'correct_opponent_call': -1,
+    'incorrect_opponent_call': 1,
+    'correct_ask': 0,
+    'incorrect_ask': 0,
     'correct_team_ask': 0,
     'incorrect_team_ask': 0,
     'correct_opponent_ask': 0,
@@ -322,7 +322,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = .5
+        self.help_threshold = 0.1
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
@@ -361,7 +361,7 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        if monopoly := self.monopolized_set(new_hands):
+        if (monopoly := self.monopolized_set(new_hands)) and random.random() < 0.75:
             move = self.handle_call(None, new_hands, player, force_call=monopoly)
         else:
             is_call = action['call'][0] > action['call'][1]
