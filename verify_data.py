@@ -14,8 +14,8 @@ rewards = {
     'incorrect_team_call': 0,
     'correct_opponent_call': 0,
     'incorrect_opponent_call': 0,
-    'correct_ask': 0,
-    'incorrect_ask': 0,
+    'correct_ask': .1,
+    'incorrect_ask': -.1,
     'correct_team_ask': 0,
     'incorrect_team_ask': 0,
     'correct_opponent_ask': 0,
@@ -370,7 +370,6 @@ class SimulatedFishGame(FishGame):
             else:
                 move = self.handle_ask(action, new_hands, player)
 
-        print(move[:-1])
         self.hands.append(new_hands)
         self.datarows.insert(-1, move)
 

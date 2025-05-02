@@ -31,7 +31,7 @@ class QNetwork(nn.Module):
         self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=1) # Output: (batch, 32, 9 sets)
         self.pool = nn.AdaptiveAvgPool1d(1) # Output: (batch, 32, 1)
 
-        self.fc1 = nn.Linear(32, 32) # Input size is num_channels from conv2
+        self.fc1 = nn.Linear(32, 32)
         self.dropout = nn.Dropout(0.5)
 
         self.to_call = nn.Linear(32, 2)
@@ -61,7 +61,7 @@ class QNetwork(nn.Module):
             'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
-            'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9),
+            'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9), #TODO: combine this to a 4x54 instead for easier relations
             'ask_set': ask_set.masked_fill(~action_masks['ask_set'], -1e9),
             'ask_card': ask_card
         }
@@ -90,7 +90,7 @@ class QLearningAgent:
         self.real_data = real_data
 
         self.gamma = 0.99    # discount factor
-        self.epsilon = 0.01   # exploration rate
+        self.epsilon = 0.1   # exploration rate
         self.hand_batch_size = 3
         self.q_batch_size = 1024
 
@@ -313,7 +313,7 @@ class QLearningAgent:
         with open(path, 'wb') as f:
             pickle.dump(memory, f)
 
-    def train_self_play(self, n_games, update_rate=5, q_epochs=10, hand_epochs=10, path='models/model.pth'):
+    def train_self_play(self, n_games, q_epochs=10, hand_epochs=10, path='models/model.pth'):
         try:
             with open('stored_memories.pkl', 'rb') as f:
                 memories = pickle.load(f)
@@ -322,15 +322,12 @@ class QLearningAgent:
         memories_batch = []
         for i in range(n_games):
             game, memory = self.simulate_game()
-            memories_batch += memory
             memories += memory if len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories collected")
-            if i % update_rate == 0 and i:
-                self.train_on_data(memories_batch, q_epochs, hand_epochs, lr_schedule=False)
-                memories_batch = []
-            if i % (update_rate * 3) == 0 and i:
-                if len(memories) > 300: # sampling
-                    memories = random.sample(memories, 300) # shrink
+            self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
+            if i % 3 == 0 and i:
+                if len(memories) > 300:
+                    memories = random.sample(memories, 300)
                     self.train_on_data(memories, q_epochs*3, hand_epochs*3, lr_schedule=False)
                     self.pickle_memory(memories)
                 self.save_model(path)
@@ -357,8 +354,6 @@ class QLearningAgent:
             game.all_pred_hands.append(saved)
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
-                    print(saved[game.turn])
-                    # print(game.hands[-1])
                     game.parse_action(actions[game.turn], game.turn)
                 elif no_call_count < 3:
                     no_call_count += 1
@@ -376,12 +371,12 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         for player in game.players:
-            for _ in range(25):
+            for _ in range(50):
                 game.shuffle()
                 memories.append(game.memory(player))
         return game, memories
 
-    def act(self, state, mask):
+    def act(self, state, mask):  # sourcery skip: remove-redundant-if
         self.q_network.eval()
         self.hand_predictor.eval()
         with torch.no_grad():
@@ -391,11 +386,11 @@ class QLearningAgent:
         for key in q_vals.keys():
             row_data = q_vals[key][0].cpu().detach().numpy()
             if random.random() < self.epsilon:
-                if key != 'call_cards':
-                    row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
-                else:
+                if key == 'call_cards':
                     for i in range(6):
                         row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
+                elif key != 'call':
+                    row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
             result[key] = row_data
         return pred_hands, result
     
