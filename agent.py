@@ -186,17 +186,17 @@ class QLearningAgent:
         random.shuffle(indices)
         return {key: self.shuffle_item(value, indices) for key, value in self.memory.items()}
     
-    def shuffle_episodes(self):
-        keys =  list(self.episode_indices.keys())
+    def shuffle_episodes(self, episode_indices, memory):
+        keys =  list(episode_indices.keys())
         random.shuffle(keys)
-        self.episode_indices = {key: self.episode_indices[key] for key in keys}
+        episode_indices = {key: episode_indices[key] for key in keys}
         
-        indices = np.concatenate(list(self.episode_indices.values()))
+        indices = np.concatenate(list(episode_indices.values()))
         index = 0
-        for i, episode in self.episode_indices.items():
-            self.episode_indices[i] = np.arange(index, index + len(episode))
+        for i, episode in episode_indices.items():
+            episode_indices[i] = np.arange(index, index + len(episode))
             index += len(episode)
-        return {key: self.shuffle_item(value, indices) for key, value in self.memory.items()}
+        return episode_indices, {key: self.shuffle_item(value, indices) for key, value in memory.items()}
     
     def pick_batch(self, memory, indices):
         start, end = indices
@@ -260,17 +260,17 @@ class QLearningAgent:
         test_episode_lengths = [episode.size for episode in list(self.episode_indices.values())[-self.hand_batch_size:]]
         end = len(self.memory['state'])
         test_batch = self.pick_batch(self.memory, (end-sum(test_episode_lengths),end))
-        self.episode_indices = dict(itertools.islice(self.episode_indices.items(), len(self.episode_indices)-self.hand_batch_size))
-        self.memory = self.pick_batch(self.memory, (0,end-sum(test_episode_lengths)))
+        episode_indices = dict(itertools.islice(self.episode_indices.items(), len(self.episode_indices)-self.hand_batch_size))
+        memory = self.pick_batch(self.memory, (0,end-sum(test_episode_lengths)))
 
         t = tqdm(range(n_epochs), desc="Training Hand Predictor")
         for epoch in t:
-            shuffled_memory = self.shuffle_episodes()
-            episode_lengths = [episode.size for episode in self.episode_indices.values()]
+            episode_indices, shuffled_memory = self.shuffle_episodes(episode_indices, memory)
+            episode_lengths = [episode.size for episode in episode_indices.values()]
             losses, accuracies = [], []
 
             j = 0
-            for i in range(0, len(self.episode_indices), self.hand_batch_size):
+            for i in range(0, len(episode_indices), self.hand_batch_size):
                 batch_lengths = episode_lengths[i:i+self.hand_batch_size]
                 batch_size_sum = sum(batch_lengths)
                 batch = self.pick_batch(shuffled_memory, (j,j+batch_size_sum))
@@ -343,6 +343,7 @@ class QLearningAgent:
                     game.shuffle()
                     memories.append([game.memory(player, pick_last=True)[-1]])
                 self.train_on_data(memories, 1, 0, lr_schedule=False)
+                game.last_indices = {}
         game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
         game.all_pred_hands = []
@@ -385,7 +386,7 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         for player in game.players:
-            for _ in range(50):
+            for _ in range(10):
                 game.shuffle()
                 memories.append(game.memory(player))
         return game, memories
