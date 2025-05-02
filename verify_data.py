@@ -256,10 +256,10 @@ class FishGame:
                         break
         return self.last_indices[player]
 
-    def memory(self, player):
+    def memory(self, player, pick_last=False):
         self.rotate(player)
         state = self.to_state()
-        hand_encodings = [self.encode_all_hands(i) for i in range(len(state))]
+        hand_encodings = [self.encode_all_hands(i) for i in range(len(state)+1)]
 
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
@@ -285,7 +285,7 @@ class FishGame:
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
-        } for i in range(last)]
+        } for i in ([last-3] if pick_last else range(last))]
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)

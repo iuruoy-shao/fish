@@ -228,8 +228,9 @@ class QLearningAgent:
     
     def train_q_network(self, n_epochs, lr_schedule=True):
         pred_hands = 'predicted_hands' in self.memory
-        test_batch = self.pick_batch(self.memory, (len(self.memory['state'])-self.q_batch_size, len(self.memory['state'])))
-        self.memory = self.pick_batch(self.memory, (0, len(self.memory['state'])-self.q_batch_size))
+        train_size = int(0.8 * len(self.memory['state']))
+        test_batch = self.pick_batch(self.memory, (train_size, len(self.memory['state'])))
+        self.memory = self.pick_batch(self.memory, (0, train_size))
         
         t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
@@ -319,7 +320,6 @@ class QLearningAgent:
                 memories = pickle.load(f)
         except (FileNotFoundError, EOFError):
             memories = self.real_data
-        memories_batch = []
         for i in range(n_games):
             game, memory = self.simulate_game()
             memories += memory if len(game.datarows) > 50 else []
@@ -333,6 +333,14 @@ class QLearningAgent:
                 self.save_model(path)
 
     def simulate_game(self):
+        def train_at_step(player):
+            if len(game.hands) > 2:
+                game.rotate(player)
+                memories = []
+                for _ in range(5):
+                    game.shuffle()
+                    memories.append([game.memory(player, pick_last=True)[-1]])
+                self.train_on_data(memories, 1, 0, lr_schedule=False)
         game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
         game.all_pred_hands = []
@@ -348,13 +356,16 @@ class QLearningAgent:
                 pred_hands, action = self.act(state, mask)
                 saved[player] = game.decode_all_hands(pred_hands.cpu().detach().numpy())
                 actions[player] = action
+            game.all_pred_hands.append(saved)
+            for player in game.players_with_cards():
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
+                    train_at_step(player)
                     acted = True
-            game.all_pred_hands.append(saved)
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
                     game.parse_action(actions[game.turn], game.turn)
+                    train_at_step(game.turn)
                 elif no_call_count < 3:
                     no_call_count += 1
                 else:
@@ -365,6 +376,7 @@ class QLearningAgent:
                     calling_player = max(call_confidences, key=call_confidences.get)
                     actions[calling_player]['call'] = [1,0]
                     game.parse_action(actions[calling_player], calling_player)
+                    train_at_step(calling_player)
                     no_call_count = 0
 
         with open("sample_simulation.txt", "w") as f:
