@@ -234,7 +234,7 @@ class QLearningAgent:
         
         if use_tqdm:
             t = tqdm(range(n_epochs), desc="Training Q-Network")
-        for epoch in t:
+        for epoch in t if use_tqdm else range(n_epochs):
             shuffled_memory = self.shuffle_memory()
             losses = []
 
