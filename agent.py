@@ -226,13 +226,14 @@ class QLearningAgent:
         batch_loss = self.cross_entropy_loss(stacked_pred_hands, reshape(self.tensor(batch['hands'])))
         return batch_loss, accuracy
     
-    def train_q_network(self, n_epochs, lr_schedule=True):
+    def train_q_network(self, n_epochs, lr_schedule=True, use_tqdm=True):
         pred_hands = 'predicted_hands' in self.memory
         train_size = int(0.8 * len(self.memory['state']))
         test_batch = self.pick_batch(self.memory, (train_size, len(self.memory['state'])))
         self.memory = self.pick_batch(self.memory, (0, train_size))
         
-        t = tqdm(range(n_epochs), desc="Training Q-Network")
+        if use_tqdm:
+            t = tqdm(range(n_epochs), desc="Training Q-Network")
         for epoch in t:
             shuffled_memory = self.shuffle_memory()
             losses = []
@@ -254,7 +255,8 @@ class QLearningAgent:
             
             if lr_schedule:
                 self.q_scheduler.step(test_loss.item())
-            t.set_description(f"Training Q-Network epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
+            if use_tqdm:
+                t.set_description(f"Training Q-Network epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} lr {self.q_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def train_hand_predictor(self, n_epochs, lr_schedule=True):
         test_episode_lengths = [episode.size for episode in list(self.episode_indices.values())[-self.hand_batch_size:]]
@@ -305,12 +307,12 @@ class QLearningAgent:
         self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
         # print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
             
-    def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True):
+    def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True, use_tqdm=True):
         self.load_memory(memory)
         if hand_epochs:
             self.train_hand_predictor(hand_epochs, lr_schedule)
         if q_epochs:
-            self.train_q_network(q_epochs, lr_schedule)
+            self.train_q_network(q_epochs, lr_schedule, use_tqdm)
     
     def pickle_memory(self, memory, path='stored_memories.pkl'):
         with open(path, 'wb') as f:
@@ -348,7 +350,7 @@ class QLearningAgent:
                 for _ in range(5):
                     game.shuffle()
                     memories.append(game.memory(player, pick_last=True))
-                self.train_on_data(memories, 1, 0, lr_schedule=False)
+                self.train_on_data(memories, 1, 0, lr_schedule=False, use_tqdm=False)
                 game.last_indices = {}
         game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
