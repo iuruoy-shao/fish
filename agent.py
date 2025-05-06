@@ -395,7 +395,7 @@ class QLearningAgent:
         memories = []
         call_memories = []
         for player in game.players:
-            for _ in range(10):
+            for _ in range(20):
                 game.shuffle()
                 memory, call_memory = game.memory(player, return_call_set=True)
                 memories.append(memory)

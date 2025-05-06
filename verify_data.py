@@ -375,7 +375,7 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        if (monopoly := self.monopolized_set(new_hands)) and random.random() < 1:
+        if (monopoly := self.monopolized_set(new_hands)) and len(self.datarows) > 10:
             move = self.handle_call(None, new_hands, player, force_call=monopoly)
         else:
             is_call = action['call'][0] > action['call'][1]
