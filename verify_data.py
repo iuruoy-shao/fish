@@ -224,10 +224,7 @@ class FishGame:
             hand_vector[np.where(sets_array == card)[0][0]][np.where(sets_array == card)[1][0]] = 1
         return hand_vector.flatten() if flatten else hand_vector
     
-    def encode_all_hands(self, i, predicted=False, player=None):
-        if predicted:
-            return np.stack([self.encode_hand(self.all_pred_hands[i][player][p]) for p in self.players] 
-                            + [self.encode_hand({})] * (8-len(self.players)), axis=0)
+    def encode_all_hands(self, i, player=None):
         return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] 
                         + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
@@ -265,8 +262,8 @@ class FishGame:
             'hands': hand_encodings[i],
             'next_hands': hand_encodings[i+1] if i+1 < last else np.zeros((8, 54), dtype=int),
             **({
-                'predicted_hands': self.encode_all_hands(i, predicted=True, player=player),
-                'next_predicted_hands': self.encode_all_hands(i+1, predicted=True, player=player) 
+                'predicted_hands': self.all_pred_hands[i][player],
+                'next_predicted_hands': self.all_pred_hands[i+1][player] 
                                         if i+1 < last 
                                         else np.zeros((8, 54), dtype=int)
                 } if self.all_pred_hands else {}),
@@ -335,7 +332,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = 0.1
+        self.help_threshold = 0
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
@@ -374,7 +371,7 @@ class SimulatedFishGame(FishGame):
     def parse_action(self, action, player):
         new_hands = copy.deepcopy(self.hands[-1])
         self.rotate(player)
-        if (monopoly := self.monopolized_set(new_hands)) and random.random() < 0.75:
+        if (monopoly := self.monopolized_set(new_hands)) and random.random() < 1:
             move = self.handle_call(None, new_hands, player, force_call=monopoly)
         else:
             is_call = action['call'][0] > action['call'][1]

@@ -20,9 +20,9 @@ class HandPrediction(nn.Module):
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
-        return F.softmax(self.fc(self.dropout(out))
+        return F.softmax(F.relu(self.fc(self.dropout(out)))
                          .reshape(-1,8,54)
-                         .masked_fill(~mask, -1e9), dim=1).masked_fill(~mask, 0)
+                         .masked_fill(~mask, 0), dim=1).masked_fill(~mask, 0)
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -330,15 +330,15 @@ class QLearningAgent:
         for i in range(n_games):
             game, memory, call_memory = self.simulate_game()
             call_memories += call_memory
-            memories += memory if len(game.datarows) > 50 else []
+            memories += memory if 200 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
             self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
             if i % 3 == 0 and i:
                 if len(memories) > 300:
-                    memories = random.sample(memories, 300)
-                    self.train_on_data(memories, q_epochs*3, hand_epochs*3, lr_schedule=False)
+                    sample = random.sample(memories, 300)
+                    self.train_on_data(sample, q_epochs*3, hand_epochs*3, lr_schedule=False)
                     self.train_on_data(call_memories, q_epochs*3, 0, lr_schedule=False)
-                    self.pickle_memory(memories, 'stored_memories.pkl')
+                    self.pickle_memory(sample, 'stored_memories.pkl')
                     self.pickle_memory(call_memories, 'call_memories.pkl')
                 self.save_model(path)
 
@@ -365,7 +365,7 @@ class QLearningAgent:
                 state = self.tensor(np.stack([game.get_state(i, game_state) for i in range(len(game.hands))]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 pred_hands, action = self.act(state, mask)
-                saved[player] = game.decode_all_hands(pred_hands.cpu().detach().numpy())
+                saved[player] = pred_hands.cpu().detach().numpy()
                 actions[player] = action
             game.all_pred_hands.append(saved)
             for player in game.players_with_cards():
