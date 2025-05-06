@@ -365,7 +365,7 @@ class QLearningAgent:
                 state = self.tensor(np.stack([game.get_state(i, game_state) for i in range(len(game.hands))]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
                 pred_hands, action = self.act(state, mask)
-                saved[player] = pred_hands.cpu().detach().numpy()
+                saved[player] = game.decode_pred_hands(pred_hands.cpu().detach().numpy())
                 actions[player] = action
             game.all_pred_hands.append(saved)
             for player in game.players_with_cards():
@@ -399,7 +399,8 @@ class QLearningAgent:
                 game.shuffle()
                 memory, call_memory = game.memory(player, return_call_set=True)
                 memories.append(memory)
-                call_memories.append(call_memory)
+                if call_memory: # check nonempty
+                    call_memories.append(call_memory)
         return game, memories, call_memories
 
     def act(self, state, mask):  # sourcery skip: remove-redundant-if

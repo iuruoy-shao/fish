@@ -228,13 +228,17 @@ class FishGame:
         return np.stack([self.encode_hand(self.hands[i][p]) for p in self.players] 
                         + [self.encode_hand({})] * (8-len(self.players)), axis=0)
     
-    def decode_all_hands(self, hands): # shape, 8 x 54
-        card_assignments = {player:[] for player in self.players}
-        exclude = np.where(np.all(hands.T==0, axis=1))[0]
-        for i, index in enumerate(np.argmax(hands.T, axis=1).reshape(-1)):
-            if i not in exclude:
-                card_assignments[self.players[index]].append(all_cards[i])
-        return card_assignments
+    def decode_pred_hands(self, pred_hands): # shape, 8 x 54
+        return {all_cards[i]:{self.players[j]:pred_hands[j,i] 
+                              for j in range(len(self.players))} 
+                for i in range(54)}
+    
+    def encode_pred_hands(self, pred_hands): # shape, 8 x 54
+        array = np.zeros((8,54))
+        for i, card in enumerate(all_cards):
+            for j, player in enumerate(self.players):
+                array[j,i] = pred_hands[card][player]
+        return array
                 
     def get_state(self, i, ordered_state):
         i = i if i < len(self.hands) else -1
@@ -262,8 +266,8 @@ class FishGame:
             'hands': hand_encodings[i],
             'next_hands': hand_encodings[i+1] if i+1 < last else np.zeros((8, 54), dtype=int),
             **({
-                'predicted_hands': self.all_pred_hands[i][player],
-                'next_predicted_hands': self.all_pred_hands[i+1][player] 
+                'predicted_hands': self.encode_pred_hands(self.all_pred_hands[i][player]),
+                'next_predicted_hands': self.encode_pred_hands(self.all_pred_hands[i+1][player]) 
                                         if i+1 < last 
                                         else np.zeros((8, 54), dtype=int)
                 } if self.all_pred_hands else {}),
