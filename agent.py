@@ -330,7 +330,7 @@ class QLearningAgent:
         for i in range(n_games):
             game, memory, call_memory = self.simulate_game()
             call_memories += call_memory
-            memories += memory if 200 > len(game.datarows) > 50 else []
+            memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
             self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
             if i % 3 == 0 and i:
