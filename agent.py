@@ -221,7 +221,6 @@ class QLearningAgent:
             i += episode_length
             pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
                                                   episode['action_masks']['hands']))
-            print(pred_hands[-1][:8])
         stacked_pred_hands = reshape(torch.concat(pred_hands)) # (episode_length * 54, 7)
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
         batch_loss = self.cross_entropy_loss(stacked_pred_hands, reshape(self.tensor(batch['hands'])))
