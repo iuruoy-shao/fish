@@ -249,12 +249,11 @@ class FishGame:
         self.players = self.players[self.initials_to_index(player):] + self.players[:self.initials_to_index(player)]
     
     def last_hand_index(self, player):
-        if not self.last_indices:
-            for player in self.players:
-                for i, hand in enumerate(self.hands[::-1]):
-                    if len(hand[player]):
-                        self.last_indices[player] = len(self.hands)-i
-                        break
+        if player not in self.last_indices:
+            for i, hand in enumerate(self.hands[::-1]):
+                if len(hand[player]):
+                    self.last_indices[player] = len(self.hands)-i
+                    break
         return self.last_indices[player]
 
     def memory_item(self, i, player, state, hand_encodings, last):
