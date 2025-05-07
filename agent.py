@@ -22,7 +22,7 @@ class HandPrediction(nn.Module):
         out, _ = self.rnn(x)
         return F.softmax(F.relu(self.fc(self.dropout(out)))
                          .reshape(-1,8,54)
-                         .masked_fill(~mask, 0), dim=1).masked_fill(~mask, 0)
+                         .masked_fill(~mask, -9e8), dim=1).masked_fill(~mask, 0)
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -100,7 +100,7 @@ class QLearningAgent:
         return torch.FloatTensor(np.array(x)).to(self.device)
 
     def max_q(self, action, i):
-        if all(action['ask_set'][i] < -9e8):
+        if all(action['ask_set'][i] <= 0):
             return torch.tensor(0).to(self.device)
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
@@ -221,7 +221,8 @@ class QLearningAgent:
             i += episode_length
             pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
                                                   episode['action_masks']['hands']))
-        stacked_pred_hands = reshape(torch.concat(pred_hands))
+            print(pred_hands[-1][:8])
+        stacked_pred_hands = reshape(torch.concat(pred_hands)) # (episode_length * 54, 7)
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
         batch_loss = self.cross_entropy_loss(stacked_pred_hands, reshape(self.tensor(batch['hands'])))
         return batch_loss, accuracy
@@ -338,8 +339,8 @@ class QLearningAgent:
                     sample = random.sample(memories, 300)
                     self.train_on_data(sample, q_epochs*3, hand_epochs*3, lr_schedule=False)
                 self.train_on_data(call_memories, q_epochs*3, 0, lr_schedule=False)
-                if len(call_memories) > 1000:
-                    self.train_on_data(random.sample(call_memories, 1000), q_epochs*3, 0, lr_schedule=False)
+                if len(call_memories) > 300:
+                    self.train_on_data(random.sample(call_memories, 300), q_epochs*3, 0, lr_schedule=False)
                 self.pickle_memory(memories, 'stored_memories.pkl')
                 self.pickle_memory(call_memories, 'call_memories.pkl')
                 self.save_model(path)
@@ -416,9 +417,9 @@ class QLearningAgent:
             random_n = random.random()
             if key == 'call_cards' and random_n < self.epsilon:
                 for i in range(6):
-                    row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
+                    row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > 0)
             elif (key == 'call' and random_n < self.epsilon / 10) or (key != 'call' and random_n < self.epsilon):
-                row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
+                row_data = np.random.random(row_data.shape) * (row_data > 0) # transfer masks
             result[key] = row_data
         return pred_hands, result
     
