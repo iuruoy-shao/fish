@@ -346,9 +346,13 @@ class QLearningAgent:
 
     def simulate_game(self):
         def train_at_step(player):
-            if len(game.hands) > 2: # increase specificity
+            if len(game.hands) > 2:
                 game.rotate(player)
-                self.train_on_data([game.memory(player, pick_last=True)], 1, 0, lr_schedule=False, use_tqdm=False)
+                memories = []
+                for _ in range(5):
+                    memories.append(game.memory(player, pick_last=True))
+                    game.shuffle()
+                self.train_on_data(memories, 1, 0, lr_schedule=False, use_tqdm=False)
                 game.last_indices = {}
         game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
