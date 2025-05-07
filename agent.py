@@ -373,7 +373,6 @@ class QLearningAgent:
             for player in game.players_with_cards():
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
-                    train_at_step(player)
                     acted = True
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
