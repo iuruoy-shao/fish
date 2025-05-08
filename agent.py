@@ -391,7 +391,7 @@ class QLearningAgent:
         memories = []
         call_memories = []
         for player in game.players:
-            for _ in range(20):
+            for _ in range(50):
                 game.shuffle()
                 memory, call_memory = game.memory(player, return_call_set=True)
                 memories.append(memory)
@@ -411,9 +411,9 @@ class QLearningAgent:
             random_n = random.random()
             if key == 'call_cards' and random_n < self.epsilon:
                 for i in range(6):
-                    row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > 0)
+                    row_data[i] = np.random.random(row_data[i].shape) * (row_data[i] > -9e8)
             elif (key == 'call' and random_n < self.epsilon / 10) or (key != 'call' and random_n < self.epsilon):
-                row_data = np.random.random(row_data.shape) * (row_data > 0) # transfer masks
+                row_data = np.random.random(row_data.shape) * (row_data > -9e8) # transfer masks
             result[key] = row_data
         return pred_hands, result
     
