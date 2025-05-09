@@ -26,4 +26,4 @@ new_hands = copy.deepcopy(game.hands[-1])
 if action['call'][0] > action['call'][1]:
     print(game.handle_call(action, new_hands, player))
 else:
-    print(game.handle_ask(action, new_hands, player))
+    print(game.handle_ask(action, new_hands, player, help_call=False))
