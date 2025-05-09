@@ -418,11 +418,11 @@ class SimulatedFishGame(FishGame):
         return f'{player} {" ".join([f"{ref_player}:{{{",".join(card_assignments[ref_player])}}}" 
                            for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
 
-    def handle_ask(self, action, new_hands, player):
+    def handle_ask(self, action, new_hands, player, help_call=True):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
         card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
-        if int(player[-1]) % 2 and not success and random.random() < self.help_threshold:
+        if help_call and int(player[-1]) % 2 and not success and random.random() < self.help_threshold:
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):
                 card = helped_card
                 success = True
