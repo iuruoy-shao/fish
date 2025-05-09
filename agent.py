@@ -288,7 +288,7 @@ class QLearningAgent:
             t.set_description(f"Training Hand Predictor epoch {epoch} train loss {round(torch.mean(torch.stack(losses)).item(), 5)} test loss {round(test_loss.item(), 5)} train acc {round(np.average(accuracies), 2)} test acc {round(test_acc, 2)} lr {self.hand_optimizer.param_groups[0]['lr']}", refresh=True)
     
     def load_memory(self, memory):
-        # start = time.time()
+        start = time.time()
         self.memory, self.episode_indices, index = [], {}, 0
         for i, episode in enumerate(memory):
             self.episode_indices[i] = np.arange(index,index+len(episode))
@@ -297,7 +297,7 @@ class QLearningAgent:
         self.memory = self.unpack_memory(self.memory)
         self.memory['action_masks']  = self.action_masks(*self.memory['mask_dep'].values())
         self.memory['next_action_masks'] = self.action_masks(*self.memory['next_mask_dep'].values())
-        # print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
+        print(f"Memory loaded in {round(time.time()-start, 2)} seconds")
             
     def train_on_data(self, memory, q_epochs, hand_epochs, lr_schedule=True, use_tqdm=True):
         self.load_memory(memory)
