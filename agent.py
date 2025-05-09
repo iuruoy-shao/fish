@@ -115,8 +115,10 @@ class QLearningAgent:
             this_player_action = torch.stack([self.tensor(x) for x in player_action[act] if x is not None])
             
             if act == 'call_cards':
-                agent_actions.extend([torch.flatten(array) for array in this_action.unbind(1)])
-                player_actions_list.extend([torch.flatten(array) for array in  this_player_action.unbind(1)])
+                this_action = this_action.reshape(-1, 4)
+                this_player_action = this_player_action.reshape(-1, 4)
+                agent_actions.extend(this_action.unbind(0))
+                player_actions_list.extend(this_player_action.unbind(0))
                 reward_expanded.append(rewards[valid_mask].repeat_interleave(6))
                 next_qs_expanded.append(next_qs[valid_mask].repeat_interleave(6))
             else:
@@ -125,8 +127,6 @@ class QLearningAgent:
                 reward_expanded.append(torch.flatten(rewards[valid_mask]))
                 next_qs_expanded.append(torch.flatten(next_qs[valid_mask]))
         
-        current_qs = self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions_list))
-        target_qs = self.target_q(torch.cat(next_qs_expanded), torch.cat(reward_expanded))
         return self.loss(self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions_list)),
                          self.target_q(torch.cat(next_qs_expanded), torch.cat(reward_expanded)))
     
