@@ -3,9 +3,11 @@ from agent import QLearningAgent
 import numpy as np
 import copy
 
+agent = QLearningAgent()
+agent.load_model('models/fish_agent.pth')
+
 np.set_printoptions(suppress=True)
 player = "YS"
-
 with open("data/test.txt", "r") as f:
     lines = f.readlines()
 game = SimulatedFishGame(8)
@@ -14,8 +16,7 @@ game.init_hands = {player.split(":")[0]:set(player.split(":")[1][1:-1].split(','
                            for player in game.datarows[0].split()}
 game.hands = [game.init_hands]
 game.players = list(game.init_hands.keys())
-agent = QLearningAgent()
-agent.load_model('models/fish_agent.pth')
+game.verify()
 
 game.rotate(player)
 game_state = game.to_state()

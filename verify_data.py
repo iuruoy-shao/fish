@@ -331,7 +331,8 @@ class FishGame:
         if score != self.score:
             raise ParseError(f"Score is invalid {score} {self.score}")
         if not any(hands[-1].values()):
-            self.hands = hands
+            print(f"Game incomplete {hands[-1]}")
+        self.hands = hands
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
@@ -346,6 +347,7 @@ class SimulatedFishGame(FishGame):
         self.datarows = [f'{" ".join([f"{player}:{{{",".join(self.init_hands[player])}}}" 
                          for player in self.players])}\n', 'temp_score']
         self.turn = random.choice(self.players)
+        self.score = [0, 0]
 
     def ended(self):
         return not any(self.hands[-1].values())
