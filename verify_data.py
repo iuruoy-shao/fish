@@ -334,7 +334,7 @@ class FishGame:
                 hands.append(hands[-1])
         if score != self.score:
             raise ParseError(f"Score is invalid {score} {self.score}")
-        if not any(hands[-1].values()):
+        if any(hands[-1].values()):
             print(f"Game incomplete {hands[-1]}")
         self.hands = hands
 
@@ -425,6 +425,7 @@ class SimulatedFishGame(FishGame):
                            for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
 
     def handle_ask(self, action, new_hands, player, help_call=True):
+        print(action['ask'])
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
         card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
