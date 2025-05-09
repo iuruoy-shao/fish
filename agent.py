@@ -77,7 +77,7 @@ class QLearningAgent:
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
         self.hand_batch_size = 3
-        self.q_batch_size = 1024
+        self.q_batch_size = 4096
 
     def tensor(self, x, as_bool=False):
         if as_bool:
@@ -98,33 +98,37 @@ class QLearningAgent:
         return torch.sum(agent_actions * player_actions, dim=0)
 
     def q_loss(self, action, next_action, player_action, reward):
+        rewards = self.tensor(reward)
+        next_qs = torch.stack([self.max_q(next_action, i) for i in range(len(reward))])
+        
         agent_actions = []
-        player_actions = []
-        rewards = []
-        next_qs = []
-
-        for i in range(len(reward)):
-            this_reward = reward[i][0]
-            this_next_q = self.max_q(next_action, i)
-            for act in player_action.keys():
-                if player_action[act][i] is None:
-                    continue # skip Nones
-                this_action = action[act][i]
-                this_player_action = self.tensor(player_action[act][i])
-                if act == 'call_cards':
-                    agent_actions.extend(this_action)
-                    player_actions.extend(this_player_action)
-                    rewards += [this_reward] * 6
-                    next_qs += [this_next_q] * 6
-                else:
-                    agent_actions.append(this_action)
-                    player_actions.append(this_player_action)
-                    rewards.append(this_reward)
-                    next_qs.append(this_next_q)
-                    # if self.current_q(this_action, this_player_action) < -9e8:
-                    #     raise ParseError(act, this_action, this_player_action)
-        return self.loss(self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions)), 
-                         self.target_q(torch.stack(next_qs), self.tensor(rewards)))
+        player_actions_list = []
+        reward_expanded = []
+        next_qs_expanded = []
+        
+        for act in player_action.keys():
+            valid_mask = torch.tensor([x is not None for x in player_action[act]], dtype=torch.bool)
+            if not torch.any(valid_mask):
+                continue
+                
+            this_action = action[act][valid_mask]
+            this_player_action = torch.stack([self.tensor(x) for x in player_action[act] if x is not None])
+            
+            if act == 'call_cards':
+                agent_actions.extend([torch.flatten(array) for array in this_action.unbind(1)])
+                player_actions_list.extend([torch.flatten(array) for array in  this_player_action.unbind(1)])
+                reward_expanded.append(rewards[valid_mask].repeat_interleave(6))
+                next_qs_expanded.append(next_qs[valid_mask].repeat_interleave(6))
+            else:
+                agent_actions.extend(this_action)
+                player_actions_list.extend(this_player_action)
+                reward_expanded.append(torch.flatten(rewards[valid_mask]))
+                next_qs_expanded.append(torch.flatten(next_qs[valid_mask]))
+        
+        current_qs = self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions_list))
+        target_qs = self.target_q(torch.cat(next_qs_expanded), torch.cat(reward_expanded))
+        return self.loss(self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions_list)),
+                         self.target_q(torch.cat(next_qs_expanded), torch.cat(reward_expanded)))
     
     def accuracy(self, pred_hands, episode):
         pred_hands = torch.concat(pred_hands).cpu().detach().numpy()
