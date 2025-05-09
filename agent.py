@@ -27,26 +27,32 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
+        self.fc1 = nn.Linear(8*54, 256)
+        self.fc2 = nn.Linear(256, 64)
         self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Conv2d(1, 1, (8, 6), stride=(1, 6), padding=0)
-        self.to_call = nn.Linear(9, 2)
-        self.pick_call_set = nn.Linear(9, 9)
-        self.pick_call_cards = nn.Linear(8, 4)
-        self.ask = nn.Linear(8, 4)
+
+        self.to_call = nn.Linear(64, 2)
+        self.pick_call_set = nn.Linear(64, 9)
+        self.pick_call_cards = nn.Linear(64 + 9, 24)
+        
+        self.fc3 = nn.Linear(8*54, 4*54)
+        self.ask = nn.Linear(4*54, 4*54)
 
     def forward(self, x, action_masks):
-        x1 = x.reshape(-1, 1, 8, 54)
-        x1 = F.relu(self.fc1(x1).reshape(-1, 9))
+        x = x.reshape(-1, 8*54)
+        x1 = self.dropout(F.relu(self.fc1(x)))
+        x1 = self.dropout(F.relu(self.fc2(x1)))
+
         to_call = self.to_call(x1)
-        call_set = self.pick_call_set(x1).masked_fill(~action_masks['call_set'], -1e9)
-        sets = torch.argmax(call_set, dim=1)
-        x = x.reshape(-1, 8, 9, 6)
-        call_cards = self.pick_call_cards(x.permute(2, 0, 3, 1)[sets, torch.arange(x.shape[0])])
-        ask = self.ask(x.permute(0, 2, 3, 1)).permute(0, 3, 2, 1).reshape(-1, 4*54)
+        call_set = self.pick_call_set(x1)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x1, call_set), dim=1)), (-1, 6, 4))
+
+        x2 = self.dropout(F.relu(self.fc3(x)))
+        ask = self.ask(x2)
 
         return {
             'call': to_call,
-            'call_set': call_set,
+            'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
             'ask': ask.masked_fill(~action_masks['ask'], -1e9)
         }
@@ -77,7 +83,7 @@ class QLearningAgent:
         self.gamma = 0.99    # discount factor
         self.epsilon = 0.1   # exploration rate
         self.hand_batch_size = 3
-        self.q_batch_size = 4096
+        self.q_batch_size = 10000
 
     def tensor(self, x, as_bool=False):
         if as_bool:
