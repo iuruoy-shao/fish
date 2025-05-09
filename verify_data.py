@@ -257,6 +257,10 @@ class FishGame:
         return self.last_indices[player]
 
     def memory_item(self, i, player, state, hand_encodings, last):
+        def ask_vector(r, c):
+            a = np.zeros((4, 54), dtype=int)
+            a[r][c] = 1
+            return a.flatten()
         is_ask = lambda i: not any(state[i][:CALL_LEN]) and (state[i][CALL_LEN:CALL_LEN+8] == self.encode_player(player)).all()
         is_call = lambda i: any(state[i][:CALL_LEN]) and (state[i][:8] == self.encode_player(player)).all()
         
@@ -275,9 +279,9 @@ class FishGame:
                 'call': np.array([1,0] if is_call(i) else [0,1]),
                 'call_set': state[i][8:8+9] if is_call(i) else None,
                 'call_cards': state[i][8+9:8+9+24].reshape((6,4)) if is_call(i) else None,
-                'ask_person': state[i][CALL_LEN+8:CALL_LEN+8+8][1::2] if is_ask(i) else None, 
-                'ask_set': state[i][CALL_LEN+8+8:CALL_LEN+8+8+9] if is_ask(i) else None,
-                'ask_card': state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6] if is_ask(i) else None,
+                'ask': ask_vector(np.argmax(state[i][CALL_LEN+8:CALL_LEN+8+8][1::2]),
+                                  np.argmax(state[i][CALL_LEN+8+8:CALL_LEN+8+8+9]) * 6 
+                                  + np.argmax(state[i][CALL_LEN+8+8+9:CALL_LEN+8+8+9+6])) if is_ask(i) else None,
             },
             'mask_dep': self.mask_dep(i, player),
             'next_mask_dep': self.mask_dep(i+1, player)
