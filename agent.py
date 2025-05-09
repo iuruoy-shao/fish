@@ -1,4 +1,4 @@
-from verify_data import SimulatedFishGame, CALL_LEN, ASK_LEN
+from verify_data import SimulatedFishGame, CALL_LEN, ASK_LEN, ParseError
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -131,6 +131,8 @@ class QLearningAgent:
                     player_actions.append(this_player_action)
                     rewards.append(this_reward)
                     next_qs.append(this_next_q)
+                    # if self.current_q(this_action, this_player_action) < -9e8:
+                    #     raise ParseError(act, this_action, this_player_action)
         return self.loss(self.current_q(pad_sequence(agent_actions), pad_sequence(player_actions)), 
                          self.target_q(torch.stack(next_qs), self.tensor(rewards)))
     
@@ -329,12 +331,10 @@ class QLearningAgent:
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
             self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
             if i % 3 == 0 and i:
-                if len(memories) > 300:
-                    sample = random.sample(memories, 300)
-                    self.train_on_data(sample, q_epochs*3, hand_epochs*3, lr_schedule=False)
-                self.train_on_data(call_memories, q_epochs*3, 0, lr_schedule=False)
-                if len(call_memories) > 300:
-                    self.train_on_data(random.sample(call_memories, 300), q_epochs*3, 0, lr_schedule=False)
+                if len(memories) > 100:
+                    self.train_on_data(random.sample(memories, 100), q_epochs*3, hand_epochs*3, lr_schedule=False)
+                if len(call_memories) > 100:
+                    self.train_on_data(random.sample(call_memories, 100), q_epochs*3, 0, lr_schedule=False)
                 self.pickle_memory(memories, 'stored_memories.pkl')
                 self.pickle_memory(call_memories, 'call_memories.pkl')
                 self.save_model(path)
@@ -391,7 +391,7 @@ class QLearningAgent:
         memories = []
         call_memories = []
         for player in game.players:
-            for _ in range(50):
+            for _ in range(25):
                 game.shuffle()
                 memory, call_memory = game.memory(player, return_call_set=True)
                 memories.append(memory)

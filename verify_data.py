@@ -335,7 +335,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = 0
+        self.help_threshold = 0.5
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]
@@ -422,7 +422,7 @@ class SimulatedFishGame(FishGame):
         ask_person = self.players[1::2][np.argmax(action['ask_person'])]
         card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
         success = card in new_hands[ask_person]
-        if not success and random.random() < self.help_threshold:
+        if int(player[-1]) % 2 and not success and random.random() < self.help_threshold:
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):
                 card = helped_card
                 success = True
