@@ -425,9 +425,10 @@ class SimulatedFishGame(FishGame):
                            for ref_player in self.players[::2] if card_assignments[ref_player]])} {int(success)}\n'
 
     def handle_ask(self, action, new_hands, player, help_call=True):
-        print(action['ask'])
-        ask_person = self.players[1::2][np.argmax(action['ask_person'])]
-        card = sets[np.argmax(action['ask_set'])][np.argmax(action['ask_card'])]
+        ask = action['ask'].reshape(4, 54)
+        ask_person, ask_card = np.unravel_index(np.argmax(ask, axis=None), ask.shape)
+        ask_person = self.players[1::2][ask_person]
+        card = all_cards[ask_card]
         success = card in new_hands[ask_person]
         if help_call and int(player[-1]) % 2 and not success and random.random() < self.help_threshold:
             if helped_card := self.pick_successful_card(player, ask_person, new_hands, card):

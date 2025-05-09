@@ -31,17 +31,17 @@ class QNetwork(nn.Module):
         self.fc2 = nn.Linear(256, 64)
         self.dropout = nn.Dropout(0.5)
 
-        self.to_call = nn.Linear(32, 2)
-        self.pick_call_set = nn.Linear(32, 9)
-        self.pick_call_cards = nn.Linear(32 + 9, 24)
+        self.to_call = nn.Linear(64, 2)
+        self.pick_call_set = nn.Linear(64, 9)
+        self.pick_call_cards = nn.Linear(64 + 9, 24)
         
         self.fc3 = nn.Linear(8*54, 4*54)
         self.ask = nn.Linear(4*54, 4*54)
 
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
-        x = self.dropout(F.relu(self.fc1(x)))
-        x1 = self.dropout(F.relu(self.fc2(x)))
+        x1 = self.dropout(F.relu(self.fc1(x)))
+        x1 = self.dropout(F.relu(self.fc2(x1)))
 
         to_call = self.to_call(x1)
         call_set = self.pick_call_set(x1)
@@ -152,9 +152,9 @@ class QLearningAgent:
                                  as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
-            'ask': self.tensor(np.tile((cards_remaining[:,1::2] > 0).reshape((-1,8,1)), (1,1,54))
+            'ask': self.tensor(np.tile((cards_remaining[:,1::2] > 0).reshape((-1,4,1)), (1,1,54))
                                * np.tile(np.repeat(np.sum(hand, axis=2), 6, axis=1)[:,np.newaxis,:] , (1,4,1)), 
-                               as_bool=True)
+                               as_bool=True).reshape((-1,4*54))
         }
     
     def unpack_memory(self, batch):
