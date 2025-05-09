@@ -28,37 +28,33 @@ class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(8*54, 256)
-        self.fc2 = nn.Linear(256, 32)
+        self.fc2 = nn.Linear(256, 64)
         self.dropout = nn.Dropout(0.5)
 
         self.to_call = nn.Linear(32, 2)
         self.pick_call_set = nn.Linear(32, 9)
         self.pick_call_cards = nn.Linear(32 + 9, 24)
-
-        self.pick_person = nn.Linear(32, 4)
-        self.pick_ask_set = nn.Linear(32 + 4, 9)
-        self.pick_ask_card = nn.Linear(32 + 4 + 9, 6)
+        
+        self.fc3 = nn.Linear(8*54, 4*54)
+        self.ask = nn.Linear(4*54, 4*54)
 
     def forward(self, x, action_masks):
         x = x.reshape(-1, 8*54)
         x = self.dropout(F.relu(self.fc1(x)))
-        x = self.dropout(F.relu(self.fc2(x)))
+        x1 = self.dropout(F.relu(self.fc2(x)))
 
-        to_call = self.to_call(x)
-        call_set = self.pick_call_set(x)
-        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x, call_set), dim=1)), (-1, 6, 4))
+        to_call = self.to_call(x1)
+        call_set = self.pick_call_set(x1)
+        call_cards = torch.reshape(self.pick_call_cards(torch.cat((x1, call_set), dim=1)), (-1, 6, 4))
 
-        ask_person = self.pick_person(x)
-        ask_set = self.pick_ask_set(torch.cat((x, ask_person), dim=1))
-        ask_card = self.pick_ask_card(torch.cat((x, ask_person, ask_set), dim=1))
+        x2 = self.dropout(F.relu(self.fc3(x)))
+        ask = self.ask(x2)
 
         return {
             'call': to_call,
             'call_set': call_set.masked_fill(~action_masks['call_set'], -1e9),
             'call_cards': call_cards.masked_fill(~action_masks['call_cards'], -1e9),
-            'ask_person': ask_person.masked_fill(~action_masks['ask_person'], -1e9), #TODO: combine this to a 4x54 instead for easier relations
-            'ask_set': ask_set.masked_fill(~action_masks['ask_set'], -1e9),
-            'ask_card': ask_card
+            'ask': ask.masked_fill(~action_masks['ask'], -1e9)
         }
 
 class QLearningAgent:
@@ -95,11 +91,11 @@ class QLearningAgent:
         return torch.FloatTensor(np.array(x)).to(self.device)
 
     def max_q(self, action, i):
-        if all(action['ask_set'][i] <= 0):
+        if all(action['ask'][i] <= 0):
             return torch.tensor(0).to(self.device)
         if torch.argmax(action['call'][i]) == 0:
             return torch.max(action['call_cards'][i])
-        return torch.max(action['ask_card'][i])
+        return torch.max(action['ask'][i])
     
     def target_q(self, max_q_next, reward):
         return reward + self.gamma * max_q_next
@@ -156,8 +152,9 @@ class QLearningAgent:
                                  as_bool=True), # cards & players still in game
             'call_set': self.tensor(sets_remaining, as_bool=True),  # the sets that remain
             'call_cards': self.tensor(np.tile((cards_remaining[:,::2] > 0)[:,np.newaxis,:], (1,6,1)), as_bool=True),  # the players on the team that still have cards
-            'ask_person': self.tensor(cards_remaining[:,1::2] > 0, as_bool=True),  # the players on the opposing team that still have cards
-            'ask_set': self.tensor(np.sum(hand, axis=2) > 0, as_bool=True)  # the sets that the player holds
+            'ask': self.tensor(np.tile((cards_remaining[:,1::2] > 0).reshape((-1,8,1)), (1,1,54))
+                               * np.tile(np.repeat(np.sum(hand, axis=2), 6, axis=1)[:,np.newaxis,:] , (1,4,1)), 
+                               as_bool=True)
         }
     
     def unpack_memory(self, batch):
