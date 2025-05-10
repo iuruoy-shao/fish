@@ -329,8 +329,8 @@ class QLearningAgent:
             if i % 3 == 0 and i:
                 if len(memories) > 100:
                     self.train_on_data(random.sample(memories, 100), q_epochs*3, hand_epochs*3, lr_schedule=False)
-                if len(call_memories) > 100:
-                    self.train_on_data(random.sample(call_memories, 100), q_epochs*3, 0, lr_schedule=False)
+                if len(call_memories) > 1000:
+                    self.train_on_data(random.sample(call_memories, 1000), q_epochs*10, 0, lr_schedule=False)
                 self.pickle_memory(memories, 'stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'call_memories_2.pkl')
                 self.save_model(path)
