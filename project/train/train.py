@@ -9,5 +9,5 @@ import pickle
 # print(f"memories: {len(memories)}, stored_memories: {len(stored_memories)}")
 
 agent = QLearningAgent()
-agent.load_model('../models/model.pth')
-agent.train_self_play(75,5,5,'../models/model.pth')
+agent.load_model('project/models/model.pth')
+agent.train_self_play(75,5,5,'project/models/model.pth')
