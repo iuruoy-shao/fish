@@ -35,6 +35,7 @@ class QNetwork(nn.Module):
         self.ask = nn.Linear(8, 4)
 
     def forward(self, x, action_masks):
+        x = self.dropout(x)
         x1 = x.reshape(-1, 1, 8, 54)
         x1 = self.fc1(x1).reshape(-1, 9)
         to_call = self.to_call(x1)
