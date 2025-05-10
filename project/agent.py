@@ -381,7 +381,7 @@ class QLearningAgent:
                     train_at_step(calling_player)
                     no_call_count = 0
 
-        with open("project/sample_simulation.txt", "w") as f:
+        with open("project/train/sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
         call_memories = []
