@@ -20,7 +20,7 @@ class HandPrediction(nn.Module):
         
     def forward(self, x, mask):
         out, _ = self.rnn(x)
-        return F.softmax(F.relu(self.fc(self.dropout(out)))
+        return F.softmax(self.fc(self.dropout(out))
                          .reshape(-1,8,54)
                          .masked_fill(~mask, -9e8), dim=1).masked_fill(~mask, 0)
 
@@ -36,7 +36,7 @@ class QNetwork(nn.Module):
 
     def forward(self, x, action_masks):
         x1 = x.reshape(-1, 1, 8, 54)
-        x1 = F.relu(self.fc1(x1).reshape(-1, 9))
+        x1 = self.fc1(x1).reshape(-1, 9)
         to_call = self.to_call(x1)
         call_set = self.pick_call_set(x1).masked_fill(~action_masks['call_set'], -1e9)
         sets = torch.argmax(call_set, dim=1)
