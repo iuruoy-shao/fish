@@ -1,5 +1,5 @@
-from verify_data import SimulatedFishGame
-from agent import QLearningAgent
+from project.verify_data import SimulatedFishGame
+from project.agent import QLearningAgent
 import numpy as np
 import copy
 
@@ -8,7 +8,7 @@ agent.load_model('models/fish_agent.pth')
 
 np.set_printoptions(suppress=True)
 player = "YS"
-with open("data/test.txt", "r") as f:
+with open("project/demo/data/5-9_13:39.txt", "r") as f:
     lines = f.readlines()
 game = SimulatedFishGame(8)
 game.datarows = lines
@@ -18,6 +18,7 @@ game.hands = [game.init_hands]
 game.players = list(game.init_hands.keys())
 game.verify()
 
+agent.epsilon = 0
 game.rotate(player)
 game_state = game.to_state()
 state = agent.tensor(np.stack([game.get_state(i, game_state) for i in range(len(game.hands))]))

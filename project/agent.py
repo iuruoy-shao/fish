@@ -1,4 +1,4 @@
-from verify_data import SimulatedFishGame, CALL_LEN, ASK_LEN, ParseError
+from project.verify_data import SimulatedFishGame, CALL_LEN, ASK_LEN, ParseError
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -312,9 +312,9 @@ class QLearningAgent:
 
     def train_self_play(self, n_games, q_epochs=10, hand_epochs=10, path='models/model.pth'):
         try:
-            with open('stored_memories_2.pkl', 'rb') as f:
+            with open('project/train/stored_memories_2.pkl', 'rb') as f:
                 memories = pickle.load(f)
-            with open('call_memories_2.pkl', 'rb') as f:
+            with open('project/train/call_memories_2.pkl', 'rb') as f:
                 call_memories = pickle.load(f)
         except (FileNotFoundError, EOFError):
             memories = self.real_data
@@ -381,7 +381,7 @@ class QLearningAgent:
                     train_at_step(calling_player)
                     no_call_count = 0
 
-        with open("sample_simulation.txt", "w") as f:
+        with open("project/sample_simulation.txt", "w") as f:
             f.writelines(game.datarows)
         memories = []
         call_memories = []

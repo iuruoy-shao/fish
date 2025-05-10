@@ -22,7 +22,7 @@ rewards = {
     'incorrect_opponent_ask': 0,
 }
 
-with open('sets.json','r') as f:
+with open('project/sets.json','r') as f:
     global sets_array
     global sets
     global card_to_vector
