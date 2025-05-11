@@ -27,16 +27,16 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Conv2d(1, 1, (8, 6), stride=(1, 6), padding=0, bias=False)
-        self.to_call = nn.Linear(9, 2, bias=False)
+        self.fc1 = nn.Linear(8, 1, bias=False)
+        self.to_call = nn.Linear(9, 2)
         self.pick_call_set = nn.Linear(9, 9, bias=False)
         self.pick_call_cards = nn.Linear(8, 4, bias=False)
         self.ask = nn.Linear(8, 4, bias=False)
 
     def forward(self, x, action_masks):
-        x1 = x.reshape(-1, 1, 8, 54)
-        x1 = self.fc1(x1).reshape(-1, 9)
-        to_call = self.to_call(x1)
+        x1 = torch.sum(x.reshape(-1,8,9,6), dim=3).permute(0,2,1) # (-1,9,8)
+        x1 = self.fc1(x1).reshape(-1,9)
+        to_call = self.to_call(F.relu(x1)) # layer engineering lol
         call_set = self.pick_call_set(x1).masked_fill(~action_masks['call_set'], -1e9)
         sets = torch.argmax(call_set, dim=1)
         x = x.reshape(-1, 8, 9, 6)
