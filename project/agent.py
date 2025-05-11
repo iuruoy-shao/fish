@@ -329,12 +329,12 @@ class QLearningAgent:
             call_memories += call_memory
             memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
-            self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
-            if i % 3 == 0 and i:
-                if len(memories) > 100:
+            # self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
+            if len(memories) > 100:
                     self.train_on_data(random.sample(memories, 100), q_epochs*3, hand_epochs*3, lr_schedule=False)
-                if len(call_memories) > 1000:
-                    self.train_on_data(random.sample(call_memories, 1000), q_epochs*10, 0, lr_schedule=False)
+            if len(call_memories) > 500:
+                self.train_on_data(random.sample(call_memories, 500), q_epochs*10, 0, lr_schedule=False)
+            if i % 3 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
                 self.save_model(path)
