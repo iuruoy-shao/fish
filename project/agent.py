@@ -205,8 +205,15 @@ class QLearningAgent:
         next_q = self.q_network(self.tensor(batch['next_predicted_hands' if pred_hands else 'next_hands']), batch['next_action_masks'])
         return self.q_loss(current_q, next_q, batch['action'], batch['reward'])
     
+    def hand_loss(self, pred_hands, batch):
+        pred_hands = torch.concat(pred_hands)[:,1:,:]  
+        targets = self.tensor(batch['hands'])[:,1:,:]
+        in_play_mask = (targets.sum(dim=1) > 0)
+        targets = targets.argmax(dim=1)[in_play_mask]
+        pred_hands = pred_hands.permute(0, 2, 1)[in_play_mask]  # (-1, 54, 7)
+        return self.cross_entropy_loss(pred_hands, targets)
+    
     def handle_hand_batch(self, batch, episode_lengths):
-        reshape = lambda x: torch.reshape(torch.swapaxes(x[:,1:],1,2), (-1,7))
         i = 0
         pred_hands = []
         for episode_length in episode_lengths:
@@ -214,10 +221,9 @@ class QLearningAgent:
             i += episode_length
             pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
                                                   episode['action_masks']['hands']))
-        stacked_pred_hands = reshape(torch.concat(pred_hands)) # (episode_length * 54, 7)
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
-        batch_loss = self.cross_entropy_loss(stacked_pred_hands, reshape(self.tensor(batch['hands'])))
-        return batch_loss, accuracy
+        loss = self.hand_loss(pred_hands, batch)
+        return loss, accuracy
     
     def train_q_network(self, n_epochs, lr_schedule=True, use_tqdm=True):
         pred_hands = 'predicted_hands' in self.memory
