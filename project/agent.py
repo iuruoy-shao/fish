@@ -65,7 +65,7 @@ class QLearningAgent:
         )
 
         self.q_network = QNetwork().to(self.device)
-        self.q_optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
+        self.q_optimizer = torch.optim.Adam(self.q_network.parameters(), lr=0.01)
         self.q_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.q_optimizer, mode='min', factor=0.8, patience=5, min_lr=1e-6
         )
