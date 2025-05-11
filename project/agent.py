@@ -335,8 +335,8 @@ class QLearningAgent:
                     self.train_on_data(random.sample(memories, 100), q_epochs*3, hand_epochs*3, lr_schedule=False)
                 if len(call_memories) > 1000:
                     self.train_on_data(random.sample(call_memories, 1000), q_epochs*10, 0, lr_schedule=False)
-                self.pickle_memory(memories, 'stored_memories_2.pkl')
-                self.pickle_memory(call_memories, 'call_memories_2.pkl')
+                self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
+                self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
                 self.save_model(path)
 
     def simulate_game(self):
@@ -368,6 +368,7 @@ class QLearningAgent:
             for player in game.players_with_cards():
                 if action['call'][0] > action['call'][1] and not acted:
                     game.parse_action(action, player)
+                    train_at_step(game.turn)
                     acted = True
             if not acted and not game.ended():
                 if game.turn in game.players_with_cards() and not game.asking_ended():
