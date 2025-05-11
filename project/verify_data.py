@@ -287,7 +287,7 @@ class FishGame:
             'next_mask_dep': self.mask_dep(i+1, player)
         }
 
-    def memory(self, player, pick_last=False, return_call_set=False):
+    def memory(self, player, pick_last=False, return_sep=False):
         self.rotate(player)
         state = self.to_state()
         hand_encodings = [self.encode_all_hands(i) for i in range(len(state)+1)]
@@ -297,12 +297,16 @@ class FishGame:
 
         memory = []
         call_memory = []
+        ask_memory = []
         for i in ([last-3] if pick_last else range(last)):
             entry = self.memory_item(i, player, state, hand_encodings, last)
             memory.append(entry)
-            if return_call_set and is_call(i):
-                call_memory.append(entry)
-        return (memory, call_memory) if return_call_set else memory
+            if return_sep:
+                if is_call(i):
+                    call_memory.append(entry)
+                else:
+                    ask_memory.append(entry)
+        return (memory, ask_memory, call_memory) if return_sep else memory
     
     def sets_remaining(self, i):
         cards_remaining = np.zeros((9,6), dtype=int)
@@ -340,7 +344,7 @@ class FishGame:
 
 class SimulatedFishGame(FishGame):
     def __init__(self, n_players):
-        self.help_threshold = 0.5
+        self.help_threshold = 0.1
         self.init_hands = {}
         self.n_players = n_players
         self.players = agent_initials[:n_players]

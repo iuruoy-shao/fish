@@ -316,27 +316,28 @@ class QLearningAgent:
             pickle.dump(memory, f)
 
     def train_self_play(self, n_games, q_epochs=10, hand_epochs=10, path='models/model.pth'):
-        try:
-            with open('project/train/stored_memories_2.pkl', 'rb') as f:
-                memories = pickle.load(f)
-            with open('project/train/call_memories_2.pkl', 'rb') as f:
-                call_memories = pickle.load(f)
-        except (FileNotFoundError, EOFError):
-            memories = self.real_data
-            call_memories = []
+        with open('project/train/stored_memories_2.pkl', 'rb') as f:
+            memories = pickle.load(f)
+        with open('project/train/call_memories_2.pkl', 'rb') as f:
+            call_memories = pickle.load(f)
+        with open('project/train/ask_memories_2.pkl', 'rb') as f:
+            ask_memories = pickle.load(f)
         for i in range(n_games):
-            game, memory, call_memory = self.simulate_game()
+            game, memory, ask_memory, call_memory = self.simulate_game()
             call_memories += call_memory
+            ask_memories += ask_memory
             memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
-            # self.train_on_data(memory, q_epochs, hand_epochs, lr_schedule=False)
             if len(memories) > 100:
-                    self.train_on_data(random.sample(memories, 100), q_epochs*3, hand_epochs*3, lr_schedule=False)
+                self.train_on_data(random.sample(memories, 100), 0, hand_epochs, lr_schedule=False)
+            if len(ask_memories) > 100:
+                self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, lr_schedule=False)
             if len(call_memories) > 500:
                 self.train_on_data(random.sample(call_memories, 500), q_epochs*10, 0, lr_schedule=False)
             if i % 3 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
+                self.pickle_memory(ask_memories, 'project/train/ask_memories_2.pkl')
                 self.save_model(path)
 
     def simulate_game(self):
@@ -391,14 +392,16 @@ class QLearningAgent:
             f.writelines(game.datarows)
         memories = []
         call_memories = []
+        ask_memories = []
         for player in game.players:
             for _ in range(25):
                 game.shuffle()
-                memory, call_memory = game.memory(player, return_call_set=True)
+                memory, ask_memory, call_memory = game.memory(player, return_sep=True)
                 memories.append(memory)
                 if call_memory: # check nonempty
                     call_memories.append(call_memory)
-        return game, memories, call_memories
+                ask_memories.append(ask_memory)
+        return game, memories, ask_memories, call_memories
 
     def act(self, state, mask):  # sourcery skip: remove-redundant-if
         self.q_network.eval()
