@@ -27,15 +27,13 @@ class HandPrediction(nn.Module):
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
-        self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Conv2d(1, 1, (8, 6), stride=(1, 6), padding=0)
-        self.to_call = nn.Linear(9, 2)
-        self.pick_call_set = nn.Linear(9, 9)
-        self.pick_call_cards = nn.Linear(8, 4)
-        self.ask = nn.Linear(8, 4)
+        self.fc1 = nn.Conv2d(1, 1, (8, 6), stride=(1, 6), padding=0, bias=False)
+        self.to_call = nn.Linear(9, 2, bias=False)
+        self.pick_call_set = nn.Linear(9, 9, bias=False)
+        self.pick_call_cards = nn.Linear(8, 4, bias=False)
+        self.ask = nn.Linear(8, 4, bias=False)
 
     def forward(self, x, action_masks):
-        x = self.dropout(x)
         x1 = x.reshape(-1, 1, 8, 54)
         x1 = self.fc1(x1).reshape(-1, 9)
         to_call = self.to_call(x1)
