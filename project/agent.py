@@ -15,7 +15,7 @@ class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
         self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, batch_first=True)
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.8)
         self.fc = nn.Linear(128, 8*54)
         
     def forward(self, x, mask):
@@ -328,12 +328,12 @@ class QLearningAgent:
             ask_memories += ask_memory
             memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
-            if len(memories) > 100:
-                self.train_on_data(random.sample(memories, 100), 0, hand_epochs, lr_schedule=False)
+            if len(memories) > 300:
+                self.train_on_data(random.sample(memories, 300), 0, hand_epochs, lr_schedule=False)
             if len(ask_memories) > 100:
                 self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, lr_schedule=False)
-            if len(call_memories) > 500:
-                self.train_on_data(random.sample(call_memories, 500), q_epochs*10, 0, lr_schedule=False)
+            if len(call_memories) > 100:
+                self.train_on_data(random.sample(call_memories, 100), q_epochs*10, 0, lr_schedule=False)
             if i % 3 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
