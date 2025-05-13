@@ -335,13 +335,13 @@ class QLearningAgent:
             ask_memories += ask_memory
             memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
-            self.train_on_data(memory, q_epochs, 0, reset_lr=False)
+            self.train_on_data(memory, q_epochs, 0, reset_lr=True)
             if len(memories) > 300:
-                self.train_on_data(random.sample(memories, 300), 0, hand_epochs, reset_lr=False)
+                self.train_on_data(random.sample(memories, 300), 0, hand_epochs, reset_lr=True)
             if len(ask_memories) > 100:
-                self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, reset_lr=False)
+                self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, reset_lr=True)
             if len(call_memories) > 100:
-                self.train_on_data(random.sample(call_memories, 100), q_epochs*10, 0, reset_lr=False)
+                self.train_on_data(random.sample(call_memories, 100), q_epochs*10, 0, reset_lr=True)
             if i % 3 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
@@ -356,7 +356,7 @@ class QLearningAgent:
                 for _ in range(5):
                     memories.append(game.memory(player, pick_last=True))
                     game.shuffle()
-                self.train_on_data(memories, 1, 0, reset_lr=False, use_tqdm=False)
+                self.train_on_data(memories, 1, 0, reset_lr=True, use_tqdm=False)
                 game.last_indices = {}
         game = SimulatedFishGame(random.choice((6,8)))
         no_call_count = 0
