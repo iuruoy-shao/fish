@@ -14,13 +14,15 @@ import os
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8+CALL_LEN+ASK_LEN, 128, batch_first=True)
-        self.dropout = nn.Dropout(0.8)
-        self.fc = nn.Linear(128, 8*54)
+        self.rnn = nn.LSTM(8*54,8*54)
+        self.dropout = nn.Dropout(0.5)
+        self.fc1 = nn.Linear(16, 8)
+        self.fc2 = nn.Linear(6, 6)
         
     def forward(self, x, mask):
+        x = self.fc1(self.dropout(x)).permute(0,2,1).reshape(-1,8*54)
         out, _ = self.rnn(x)
-        return F.softmax(self.fc(self.dropout(out))
+        return F.softmax(self.fc2(self.dropout(out).reshape(-1,8,9,6))
                          .reshape(-1,8,54)
                          .masked_fill(~mask, -9e8), dim=1).masked_fill(~mask, 0)
 
@@ -32,7 +34,7 @@ class QNetwork(nn.Module):
         self.pick_call_set = nn.Linear(9, 9, bias=False)
         self.pick_call_cards = nn.Linear(8, 4, bias=False)
         self.ask = nn.Linear(8, 4, bias=False)
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.8)
 
     def forward(self, x, action_masks):
         x = self.dropout(x)
@@ -216,14 +218,26 @@ class QLearningAgent:
         pred_hands = pred_hands.permute(0, 2, 1)[in_play_mask]  # (-1, 54, 7)
         return self.cross_entropy_loss(pred_hands, targets)
     
+    def condense_state(self, episode):
+        x = self.tensor(episode['state'])[:,8+CALL_LEN:]
+        ask_p = torch.argmax(x[:,:8], dim=1)
+        asked_p = torch.argmax(x[:,8:8+8], dim=1)
+        card_set, card_num = torch.argmax(x[:,8+8:8+8+9], dim=1), torch.argmax(x[:,8+8+9:], dim=1)
+        card = torch.zeros((x.shape[0],54), device=x.device)
+        card[torch.arange(x.shape[0]),card_set*6+card_num] = 1
+        card *= torch.tile(torch.any(x, dim=1).unsqueeze(1),(1,54)).int()
+        x = torch.zeros((x.shape[0],16,54), device=x.device)
+        x[torch.arange(x.shape[0]),ask_p] = card
+        x[torch.arange(x.shape[0]),asked_p+8] = card
+        return x.permute(0,2,1)
+    
     def handle_hand_batch(self, batch, episode_lengths):
         i = 0
         pred_hands = []
         for episode_length in episode_lengths:
             episode = self.pick_batch(batch, (i,i+episode_length))
             i += episode_length
-            pred_hands.append(self.hand_predictor(self.tensor(episode['state']),
-                                                  episode['action_masks']['hands']))
+            pred_hands.append(self.hand_predictor(self.condense_state(episode), episode['action_masks']['hands']))
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
         loss = self.hand_loss(pred_hands, batch)
         return loss, accuracy
@@ -329,20 +343,19 @@ class QLearningAgent:
             call_memories = pickle.load(f)
         with open('project/train/ask_memories_2.pkl', 'rb') as f:
             ask_memories = pickle.load(f)
-        for i in range(n_games):
+        for i in range(1, n_games+1):
             game, memory, ask_memory, call_memory = self.simulate_game()
             call_memories += call_memory
             ask_memories += ask_memory
             memories += memory if 300 > len(game.datarows) > 50 else []
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
-            self.train_on_data(memory, q_epochs, 0, reset_lr=True)
-            if len(memories) > 300:
-                self.train_on_data(random.sample(memories, 300), 0, hand_epochs, reset_lr=True)
             if len(ask_memories) > 100:
                 self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, reset_lr=True)
             if len(call_memories) > 100:
                 self.train_on_data(random.sample(call_memories, 100), q_epochs*10, 0, reset_lr=True)
-            if i % 3 == 0 and i:
+            if len(memories) > 300:
+                self.train_on_data(random.sample(memories, 300), q_epochs, hand_epochs, reset_lr=True)
+            if i % 10 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
                 self.pickle_memory(ask_memories, 'project/train/ask_memories_2.pkl')
