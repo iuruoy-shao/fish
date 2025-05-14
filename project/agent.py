@@ -218,8 +218,8 @@ class QLearningAgent:
         pred_hands = pred_hands.permute(0, 2, 1)[in_play_mask]  # (-1, 54, 7)
         return self.cross_entropy_loss(pred_hands, targets)
     
-    def condense_state(self, episode):
-        x = self.tensor(episode['state'])[:,8+CALL_LEN:]
+    def condense_state(self, state):
+        x = state[:,8+CALL_LEN:]
         ask_p = torch.argmax(x[:,:8], dim=1)
         asked_p = torch.argmax(x[:,8:8+8], dim=1)
         card_set, card_num = torch.argmax(x[:,8+8:8+8+9], dim=1), torch.argmax(x[:,8+8+9:], dim=1)
@@ -237,7 +237,7 @@ class QLearningAgent:
         for episode_length in episode_lengths:
             episode = self.pick_batch(batch, (i,i+episode_length))
             i += episode_length
-            pred_hands.append(self.hand_predictor(self.condense_state(episode), episode['action_masks']['hands']))
+            pred_hands.append(self.hand_predictor(self.condense_state(self.tensor(episode['state'])), episode['action_masks']['hands']))
         accuracy = np.average(self.accuracy(pred_hands, batch).tolist())
         loss = self.hand_loss(pred_hands, batch)
         return loss, accuracy
