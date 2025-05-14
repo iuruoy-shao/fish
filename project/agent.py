@@ -383,7 +383,7 @@ class QLearningAgent:
                 game_state = game.to_state()
                 state = self.tensor(np.stack([game.get_state(i, game_state) for i in range(len(game.hands))]))
                 mask = self.action_masks(*self.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
-                pred_hands, action = self.act(state, mask)
+                pred_hands, action = self.act(self.condense_state(state), mask)
                 saved[player] = game.decode_pred_hands(pred_hands.cpu().detach().numpy())
                 actions[player] = action
             game.all_pred_hands.append(saved)
