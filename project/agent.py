@@ -39,7 +39,7 @@ class QNetwork(nn.Module):
     def forward(self, x, action_masks):
         x = self.dropout(x)
         x1 = torch.sum(x.reshape(-1,8,9,6), dim=3).permute(0,2,1) # (-1,9,8)
-        x1 = self.fc1(x1).reshape(-1,9)
+        x1 = self.dropout(self.fc1(x1).reshape(-1,9))
         to_call = self.to_call(F.relu(x1)) # layer engineering lol
         call_set = self.pick_call_set(x1).masked_fill(~action_masks['call_set'], -1e9)
         sets = torch.argmax(call_set, dim=1)
