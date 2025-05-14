@@ -23,7 +23,7 @@ game.rotate(player)
 game_state = game.to_state()
 state = agent.tensor(np.stack([game.get_state(i, game_state) for i in range(len(game.hands))]))
 mask = agent.action_masks(*agent.unpack_memory([game.mask_dep(len(game.hands)-1, player)]).values())
-pred_hands, action = agent.act(state, mask)
+pred_hands, action = agent.act(agent.condense_state(state), mask)
 new_hands = copy.deepcopy(game.hands[-1])
 if action['call'][0] > action['call'][1]:
     print(game.handle_call(action, new_hands, player))
