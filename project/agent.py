@@ -14,14 +14,15 @@ import os
 class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
-        self.rnn = nn.LSTM(8*54,8*54)
-        self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(16, 8)
+        self.rnn = nn.LSTM(8*54+1,8*54)
+        self.dropout = nn.Dropout(0.2)
+        self.fc1 = nn.Linear(16, 8, bias=False)
         self.fc2 = nn.Linear(6, 6)
         
     def forward(self, x, mask):
-        x = self.fc1(self.dropout(x)).permute(0,2,1).reshape(-1,8*54)
-        out, _ = self.rnn(x)
+        ask, success = x
+        x = self.fc1(self.dropout(ask)).permute(0,2,1).reshape(-1,8*54)
+        out, _ = self.rnn(torch.concat((x, success), dim=1))
         return F.softmax(self.fc2(self.dropout(out).reshape(-1,8,9,6))
                          .reshape(-1,8,54)
                          .masked_fill(~mask, -9e8), dim=1).masked_fill(~mask, 0)
@@ -220,16 +221,17 @@ class QLearningAgent:
     
     def condense_state(self, state):
         x = state[:,8+CALL_LEN:]
+        success = x[:,8+8+9+6][:,None] * 2 - 1
         ask_p = torch.argmax(x[:,:8], dim=1)
         asked_p = torch.argmax(x[:,8:8+8], dim=1)
-        card_set, card_num = torch.argmax(x[:,8+8:8+8+9], dim=1), torch.argmax(x[:,8+8+9:], dim=1)
+        card_set, card_num = torch.argmax(x[:,8+8:8+8+9], dim=1), torch.argmax(x[:,8+8+9:8+8+9+6], dim=1)
         card = torch.zeros((x.shape[0],54), device=x.device)
         card[torch.arange(x.shape[0]),card_set*6+card_num] = 1
-        card *= torch.tile(torch.any(x, dim=1).unsqueeze(1),(1,54)).int()
+        card *= torch.any(x, dim=1)[:,None]
         x = torch.zeros((x.shape[0],16,54), device=x.device)
         x[torch.arange(x.shape[0]),ask_p] = card
         x[torch.arange(x.shape[0]),asked_p+8] = card
-        return x.permute(0,2,1)
+        return x.permute(0,2,1), success
     
     def handle_hand_batch(self, batch, episode_lengths):
         i = 0
@@ -415,7 +417,7 @@ class QLearningAgent:
         call_memories = []
         ask_memories = []
         for player in game.players:
-            for _ in range(25):
+            for _ in range(5):
                 game.shuffle()
                 memory, ask_memory, call_memory = game.memory(player, return_sep=True)
                 memories.append(memory)
