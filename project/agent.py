@@ -15,7 +15,7 @@ class HandPrediction(nn.Module):
     def __init__(self):
         super(HandPrediction, self).__init__()
         self.rnn = nn.LSTM(8*54+1,8*54)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(16, 8, bias=False)
         self.fc2 = nn.Linear(6, 6)
         
@@ -35,7 +35,7 @@ class QNetwork(nn.Module):
         self.pick_call_set = nn.Linear(9, 9, bias=False)
         self.pick_call_cards = nn.Linear(8, 4, bias=False)
         self.ask = nn.Linear(8, 4, bias=False)
-        self.dropout = nn.Dropout(0.8)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x, action_masks):
         x = self.dropout(x)
@@ -349,14 +349,13 @@ class QLearningAgent:
             game, memory, ask_memory, call_memory = self.simulate_game()
             call_memories += call_memory
             ask_memories += ask_memory
-            memories += memory if 300 > len(game.datarows) > 50 else []
+            memories += memory
             print(f"Game {i} finished, {len(memories)} memories, {len(call_memories)} calls collected")
             if len(ask_memories) > 100:
                 self.train_on_data(random.sample(ask_memories, 100), q_epochs, 0, reset_lr=True)
             if len(call_memories) > 100:
                 self.train_on_data(random.sample(call_memories, 100), q_epochs*10, 0, reset_lr=True)
-            if len(memories) > 300:
-                self.train_on_data(random.sample(memories, 300), q_epochs, hand_epochs, reset_lr=True)
+            self.train_on_data(memory, q_epochs, hand_epochs, reset_lr=True)
             if i % 10 == 0 and i:
                 self.pickle_memory(memories, 'project/train/stored_memories_2.pkl')
                 self.pickle_memory(call_memories, 'project/train/call_memories_2.pkl')
@@ -417,7 +416,7 @@ class QLearningAgent:
         call_memories = []
         ask_memories = []
         for player in game.players:
-            for _ in range(5):
+            for _ in range(10):
                 game.shuffle()
                 memory, ask_memory, call_memory = game.memory(player, return_sep=True)
                 memories.append(memory)
