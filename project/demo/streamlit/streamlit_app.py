@@ -1,4 +1,7 @@
 import streamlit as st
+import os
+os.environ["PYTHONPATH"] = st.secrets["PYTHONPATH"]
+
 from project.verify_data import SimulatedFishGame, FishGame
 from project.agent import QLearningAgent
 import copy
